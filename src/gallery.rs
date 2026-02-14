@@ -175,7 +175,8 @@ main{{padding:1rem 2rem 4rem}}
 /* Lightbox */
 .lightbox{{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.97);flex-direction:column;align-items:center;justify-content:center}}
 .lightbox.open{{display:flex}}
-.lightbox img#lb-img{{max-width:90vw;max-height:70vh;object-fit:contain;border-radius:4px;user-select:none}}
+.lightbox img#lb-img{{max-width:90vw;max-height:70vh;object-fit:contain;border-radius:4px;user-select:none;transition:filter .3s}}
+.lightbox img#lb-img.lb-loading{{filter:blur(6px)}}
 .lb-top-bar{{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:.8rem 1.5rem;z-index:1002}}
 .lb-close{{font-size:2rem;color:#888;cursor:pointer;transition:color .2s}}
 .lb-close:hover{{color:#fff}}
@@ -184,6 +185,8 @@ main{{padding:1rem 2rem 4rem}}
 .lb-action:hover{{color:#fff;border-color:#888}}
 .lb-delete-btn{{color:#f66!important;border-color:#633!important}}
 .lb-delete-btn:hover{{color:#fff!important;background:#a33!important;border-color:#a33!important}}
+.lb-info-btn{{color:#8cf!important;border-color:#346!important}}
+.lb-info-btn:hover{{color:#fff!important;background:#457!important;border-color:#457!important}}
 .lb-move-btn{{color:#fc6!important;border-color:#653!important}}
 .lb-move-btn:hover{{color:#fff!important;background:#a73!important;border-color:#a73!important}}
 .lb-nav{{position:absolute;top:50%;transform:translateY(-50%);font-size:3rem;color:#555;cursor:pointer;user-select:none;padding:1rem;transition:color .2s;z-index:1001}}
@@ -213,6 +216,21 @@ main{{padding:1rem 2rem 4rem}}
 .slideshow-controls{{position:absolute;bottom:1.5rem;display:flex;gap:.5rem;z-index:1002}}
 .slideshow-controls button{{background:rgba(255,255,255,.1);color:#ccc;border:1px solid #444;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:all .2s}}
 .slideshow-controls button:hover,.slideshow-controls button.active{{background:#4fc3f7;color:#000;border-color:#4fc3f7}}
+
+/* EXIF modal */
+.exif-modal{{display:none;position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.7);align-items:center;justify-content:center}}
+.exif-modal.open{{display:flex}}
+.exif-content{{background:#1a1a1a;border:1px solid #333;border-radius:10px;max-width:560px;width:90vw;max-height:80vh;display:flex;flex-direction:column}}
+.exif-header{{display:flex;justify-content:space-between;align-items:center;padding:.8rem 1.2rem;border-bottom:1px solid #2a2a2a}}
+.exif-title{{color:#8cf;font-weight:600;font-size:1rem}}
+.exif-close{{font-size:1.5rem;color:#888;cursor:pointer;transition:color .2s}}
+.exif-close:hover{{color:#fff}}
+.exif-body{{overflow-y:auto;padding:1rem 1.2rem}}
+.exif-body table{{width:100%;border-collapse:collapse}}
+.exif-body td{{padding:.25rem .5rem;font-size:.82rem;border-bottom:1px solid #1f1f1f;vertical-align:top}}
+.exif-body td:first-child{{color:#888;white-space:nowrap;width:40%}}
+.exif-body td:last-child{{color:#ddd;word-break:break-word}}
+.exif-body .exif-loading{{color:#888;text-align:center;padding:2rem 0}}
 
 /* Toast */
 .toast{{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#2a2a2a;color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-size:.85rem;z-index:2000;opacity:0;transition:opacity .3s;pointer-events:none}}
@@ -259,6 +277,7 @@ main{{padding:1rem 2rem 4rem}}
       <a class="lb-action" id="lb-download" download>&#x2B07; Télécharger</a>
       <button class="lb-action lb-rotate" id="lb-rotate-left" title="Rotation gauche">&#x21BA;</button>
       <button class="lb-action lb-rotate" id="lb-rotate-right" title="Rotation droite">&#x21BB;</button>
+      <button class="lb-action lb-info-btn" id="lb-info" title="Métadonnées">&#x2139; Info</button>
       <button class="lb-action lb-move-btn" id="lb-move" title="Déplacer">&#x1F4C1; Déplacer</button>
       <button class="lb-action lb-delete-btn" id="lb-delete" title="Supprimer">&#x1F5D1; Supprimer</button>
     </div>
@@ -288,6 +307,16 @@ main{{padding:1rem 2rem 4rem}}
     <button id="ss-speed-down">-</button>
     <span id="ss-speed" style="color:#ccc;font-size:.85rem">5s</span>
     <button id="ss-speed-up">+</button>
+  </div>
+</div>
+
+<div class="exif-modal" id="exif-modal">
+  <div class="exif-content">
+    <div class="exif-header">
+      <span class="exif-title">Métadonnées</span>
+      <span class="exif-close" id="exif-close">&times;</span>
+    </div>
+    <div class="exif-body" id="exif-body"></div>
   </div>
 </div>
 
@@ -483,11 +512,19 @@ function setRating(photo,rating){{
   toast(photo.rating?'Note : '+photo.rating+'/5':'Note supprimée');
 }}
 
+let _lbHiRes=null;
 function showPhoto(idx){{
   if(filtered.length===0)return;
+  if(_lbHiRes){{_lbHiRes.onload=null;_lbHiRes=null;}}
   currentIdx=((idx%filtered.length)+filtered.length)%filtered.length;
   const p=filtered[currentIdx];
-  lbImg.src=p.src;
+  lbImg.src=getSrc(p.src);
+  lbImg.classList.add('lb-loading');
+  _lbHiRes=new Image();
+  _lbHiRes.onload=function(){{
+    if(filtered[currentIdx]===p){{lbImg.src=p.src;lbImg.classList.remove('lb-loading');}}
+  }};
+  _lbHiRes.src=p.src;
   lbName.textContent=p.name+' ('+p.year+')';
   renderLbStars(p.rating);
   renderLbTags(p);
@@ -725,6 +762,32 @@ function rotatePhoto(angle){{
 
 document.getElementById('lb-rotate-left').addEventListener('click',()=>rotatePhoto(270));
 document.getElementById('lb-rotate-right').addEventListener('click',()=>rotatePhoto(90));
+
+// EXIF info
+function escH(s){{return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}}
+function showExifInfo(){{
+  if(filtered.length===0)return;
+  const p=filtered[currentIdx];
+  const modal=document.getElementById('exif-modal');
+  const body=document.getElementById('exif-body');
+  body.innerHTML='<div class="exif-loading">Chargement…</div>';
+  modal.classList.add('open');
+  if(!isServed){{body.innerHTML='<div class="exif-loading">Disponible uniquement via photo-sort serve</div>';return;}}
+  fetch('/api/exif?path='+encodeURIComponent(p.src))
+    .then(r=>r.json())
+    .then(data=>{{
+      if(!data.length){{body.innerHTML='<div class="exif-loading">Aucune métadonnée</div>';return;}}
+      let html='<table>';
+      data.forEach(d=>{{html+='<tr><td>'+escH(d.tag)+'</td><td>'+escH(d.value)+'</td></tr>';}});
+      html+='</table>';
+      body.innerHTML=html;
+    }}).catch(()=>{{body.innerHTML='<div class="exif-loading">Erreur de chargement</div>';}});
+}}
+function closeExifModal(){{document.getElementById('exif-modal').classList.remove('open');}}
+document.getElementById('lb-info').addEventListener('click',showExifInfo);
+document.getElementById('exif-close').addEventListener('click',closeExifModal);
+document.getElementById('exif-modal').addEventListener('click',e=>{{if(e.target.id==='exif-modal')closeExifModal();}});
+document.addEventListener('keydown',e=>{{if(e.key==='Escape'&&document.getElementById('exif-modal').classList.contains('open')){{closeExifModal();e.stopPropagation();}}}},true);
 
 // Export filtered
 function exportFiltered(){{

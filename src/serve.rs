@@ -433,6 +433,67 @@ pub fn handle_request(mut req: Request, state: &ServerState) {
             }
         }
 
+        // API: EXIF / file metadata
+        (&Method::Get, "/api/exif") => {
+            let params = parse_query(&url);
+            if let Some(file) = params.get("path") {
+                if let Some(full_path) = safe_path(&state.dir, file) {
+                    if !full_path.is_file() {
+                        let _ = req.respond(json_error(404, "Fichier introuvable"));
+                        return;
+                    }
+                    let mut entries: Vec<String> = Vec::new();
+
+                    // Read EXIF data
+                    if let Ok(f) = std::fs::File::open(&full_path) {
+                        let mut reader = std::io::BufReader::new(f);
+                        if let Ok(exif) = exif::Reader::new().read_from_container(&mut reader) {
+                            for field in exif.fields() {
+                                let tag = format!("{}", field.tag);
+                                let value = field.display_value().with_unit(&exif).to_string();
+                                entries.push(format!(
+                                    "{{\"tag\":\"{}\",\"value\":\"{}\"}}",
+                                    tag.replace('"', "\\\""),
+                                    value.replace('\\', "\\\\").replace('"', "\\\"")
+                                ));
+                            }
+                        }
+                    }
+
+                    // File size
+                    if let Ok(meta) = std::fs::metadata(&full_path) {
+                        let size = meta.len();
+                        let human = if size >= 1_048_576 {
+                            format!("{:.1} Mo", size as f64 / 1_048_576.0)
+                        } else {
+                            format!("{:.0} Ko", size as f64 / 1024.0)
+                        };
+                        entries.push(format!(
+                            "{{\"tag\":\"Taille fichier\",\"value\":\"{human} ({size} octets)\"}}",
+                        ));
+                    }
+
+                    // Image dimensions
+                    if let Ok((w, h)) = image::image_dimensions(&full_path) {
+                        entries.push(format!(
+                            "{{\"tag\":\"Dimensions\",\"value\":\"{w} × {h}\"}}"
+                        ));
+                    }
+
+                    let body = format!("[{}]", entries.join(","));
+                    let resp = Response::from_string(body).with_header(
+                        Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                            .unwrap(),
+                    );
+                    let _ = req.respond(resp);
+                } else {
+                    let _ = req.respond(json_error(400, "Chemin invalide"));
+                }
+            } else {
+                let _ = req.respond(json_error(400, "Paramètre path requis"));
+            }
+        }
+
         // Thumbnail serving
         (&Method::Get, _) if path.starts_with("/thumb/") => {
             let rel = &path[7..]; // strip "/thumb/"

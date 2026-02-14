@@ -112,6 +112,8 @@ Le mode serveur ajoute des fonctionnalites supplementaires :
 - **Suppression** d'une photo avec confirmation
 - **Deplacement** d'une photo vers un autre dossier (annee)
 - **Rotation** (90/180/270 degres) des images JPEG, PNG, TIFF
+- **Metadonnees EXIF** consultables depuis la lightbox (bouton Info)
+- **Chargement progressif** : miniature instantanee puis image haute resolution
 
 ### Exporter des fichiers filtres
 
@@ -161,7 +163,7 @@ Les fichiers sont renommes au format `yyyy-mm-dd_HH-MM-SS.ext`. En cas de collis
 cargo test
 ```
 
-97 tests unitaires couvrant : tri, detection de date, renommage, collisions, hash BLAKE3, progression, metadata (tags/notes), galerie HTML, export filtre, serveur HTTP (API delete/move/rotate/metadata).
+130 tests unitaires couvrant : tri, detection de date, renommage, collisions, hash BLAKE3, progression, metadata (tags/notes), galerie HTML, export filtre, serveur HTTP (API delete/move/rotate/metadata/exif), miniatures.
 
 ## Licence
 

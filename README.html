@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>photo-sort — Documentation</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0b0e14;--surface:#131820;--border:#1e2530;--text:#c8cdd5;--muted:#6b7280;--accent:#4fc3f7;--accent2:#81d4fa;--green:#66bb6a;--orange:#ffa726;--red:#ef5350;--purple:#ab47bc;--yellow:#ffd54f;--radius:10px}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;line-height:1.7;overflow-x:hidden}
+::selection{background:var(--accent);color:#000}
+
+/* Header */
+.hero{position:relative;padding:5rem 2rem 4rem;text-align:center;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(79,195,247,.12) 0%,transparent 70%);pointer-events:none}
+.hero h1{font-size:3.5rem;font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,var(--accent),var(--accent2),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.5rem}
+.hero .tagline{font-size:1.2rem;color:var(--muted);max-width:600px;margin:0 auto 2rem}
+.badges{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;margin-bottom:2rem}
+.badge{display:inline-flex;align-items:center;gap:.35rem;background:var(--surface);border:1px solid var(--border);padding:.35rem .8rem;border-radius:20px;font-size:.8rem;color:var(--muted)}
+.badge .dot{width:8px;height:8px;border-radius:50%}
+.badge .dot.rust{background:#dea584}.badge .dot.exif{background:var(--accent)}.badge .dot.formats{background:var(--green)}.badge .dot.tests{background:var(--purple)}
+
+/* Layout */
+.container{max-width:960px;margin:0 auto;padding:0 2rem 4rem}
+section{margin-bottom:3.5rem}
+h2{font-size:1.6rem;font-weight:700;color:#e8ecf0;margin-bottom:1.2rem;display:flex;align-items:center;gap:.5rem}
+h2 .icon{font-size:1.3rem}
+h3{font-size:1.1rem;font-weight:600;color:var(--accent);margin:1.5rem 0 .6rem}
+
+/* Cards */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.3rem;transition:border-color .2s,transform .2s}
+.card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.card .card-icon{font-size:1.8rem;margin-bottom:.5rem}
+.card h3{margin:0 0 .4rem;color:#e8ecf0;font-size:1rem}
+.card p{color:var(--muted);font-size:.88rem;line-height:1.5}
+
+/* Tree */
+.tree{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem 2rem;font-family:"SF Mono",Menlo,Monaco,Consolas,monospace;font-size:.85rem;line-height:1.9;overflow-x:auto}
+.tree .dir{color:var(--accent)}
+.tree .file{color:var(--muted)}
+.tree .arrow{color:var(--green);font-weight:700}
+.tree .highlight{color:var(--yellow)}
+.tree .cmd{color:var(--orange)}
+
+/* Code */
+pre{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.2rem 1.5rem;overflow-x:auto;font-size:.85rem;line-height:1.7;margin:.8rem 0}
+code{font-family:"SF Mono",Menlo,Monaco,Consolas,monospace;font-size:.85em}
+pre code{color:var(--text)}
+.cmd-prefix{color:var(--green);user-select:none}
+.comment{color:var(--muted);font-style:italic}
+
+/* Table */
+table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.88rem}
+th{text-align:left;padding:.6rem .8rem;background:var(--surface);color:var(--accent);border-bottom:2px solid var(--border);font-weight:600}
+td{padding:.5rem .8rem;border-bottom:1px solid var(--border);color:var(--text)}
+td:first-child{white-space:nowrap;color:var(--accent2);font-weight:500}
+
+/* Priority badges */
+.prio{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:.75rem;font-weight:700;color:#000}
+.prio-1{background:var(--green)}.prio-2{background:var(--orange)}.prio-3{background:var(--red)}
+
+/* Feature list */
+.features{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .8rem}
+.features li{padding:.25rem 0;font-size:.9rem;display:flex;align-items:baseline;gap:.4rem}
+.features li::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:.55rem}
+
+/* API table */
+.api-method{display:inline-block;padding:.15rem .5rem;border-radius:4px;font-size:.75rem;font-weight:700;font-family:monospace;min-width:55px;text-align:center}
+.api-get{background:#1b3a2a;color:var(--green)}
+.api-post{background:#2a2a1a;color:var(--orange)}
+.api-delete{background:#2a1a1a;color:var(--red)}
+
+/* Footer */
+footer{text-align:center;padding:2rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border)}
+footer a{color:var(--accent);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+/* Responsive */
+@media(max-width:640px){
+  .hero h1{font-size:2.2rem}
+  .hero .tagline{font-size:1rem}
+  .features{grid-template-columns:1fr}
+  .card-grid{grid-template-columns:1fr}
+  .container{padding:0 1rem 3rem}
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>photo-sort</h1>
+  <p class="tagline">Outil CLI en Rust qui trie, organise et explore vos photos avec une galerie web interactive.</p>
+  <div class="badges">
+    <span class="badge"><span class="dot rust"></span> Rust</span>
+    <span class="badge"><span class="dot exif"></span> EXIF</span>
+    <span class="badge"><span class="dot formats"></span> 14 formats</span>
+    <span class="badge"><span class="dot tests"></span> 130 tests</span>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Principe -->
+<section>
+<h2><span class="icon">&#128247;</span> Principe</h2>
+<div class="tree">
+<span class="dir">photos/</span><br>
+&nbsp;&nbsp;<span class="dir">vacances 2008/</span>DCIM/<span class="file">IMG_0001.jpg</span><br>
+&nbsp;&nbsp;<span class="dir">noel/</span><span class="file">DSC_4521.CR2</span><br>
+&nbsp;&nbsp;<span class="dir">vrac/</span><span class="file">photo_random.heic</span><br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="cmd">photo-sort sort photos/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span><br>
+<br>
+<span class="dir">photos_sorted/</span><br>
+&nbsp;&nbsp;<span class="dir">2008/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">2008-07-15_14-30-22.jpg</span><br>
+&nbsp;&nbsp;<span class="dir">2019/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">2019-12-25_18-45-01.cr2</span><br>
+&nbsp;&nbsp;<span class="dir">2024/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">2024-03-10_09-12-44.heic</span><br>
+&nbsp;&nbsp;<span class="file">.photo_sort_metadata.json</span>
+</div>
+</section>
+
+<!-- Fonctionnalites -->
+<section>
+<h2><span class="icon">&#9889;</span> Fonctionnalites</h2>
+<div class="card-grid">
+  <div class="card">
+    <div class="card-icon">&#128269;</div>
+    <h3>Detection de date intelligente</h3>
+    <p>EXIF, nom de dossier (regex 19xx/20xx), puis date systeme en dernier recours.</p>
+  </div>
+  <div class="card">
+    <div class="card-icon">&#128279;</div>
+    <h3>Deduplication BLAKE3</h3>
+    <p>Hash rapide de chaque photo avant copie. Les doublons sont ignores automatiquement.</p>
+  </div>
+  <div class="card">
+    <div class="card-icon">&#9654;</div>
+    <h3>Reprise apres interruption</h3>
+    <p>Progression JSON sauvegardee apres chaque copie, Ctrl+C gere proprement.</p>
+  </div>
+  <div class="card">
+    <div class="card-icon">&#127912;</div>
+    <h3>Galerie web interactive</h3>
+    <p>Lightbox, diaporama, tags, notes, filtres, miniatures. Fonctionne en statique ou en mode serveur.</p>
+  </div>
+  <div class="card">
+    <div class="card-icon">&#128736;</div>
+    <h3>Mode serveur</h3>
+    <p>Suppression, deplacement, rotation, metadonnees EXIF, sauvegarde directe via API REST.</p>
+  </div>
+  <div class="card">
+    <div class="card-icon">&#128230;</div>
+    <h3>Export filtre</h3>
+    <p>Copier les photos correspondant a un tag et/ou une note minimale vers un dossier cible.</p>
+  </div>
+</div>
+</section>
+
+<!-- Installation -->
+<section>
+<h2><span class="icon">&#128187;</span> Installation</h2>
+<pre><code><span class="cmd-prefix">$ </span>git clone https://github.com/yrbane/photo-sort.git
+<span class="cmd-prefix">$ </span>cd photo-sort
+<span class="cmd-prefix">$ </span>cargo build --release</code></pre>
+<p>Le binaire se trouve dans <code>target/release/photo-sort</code>.</p>
+</section>
+
+<!-- Commandes -->
+<section>
+<h2><span class="icon">&#9000;</span> Commandes</h2>
+
+<h3>Trier les photos</h3>
+<pre><code><span class="comment"># Tri basique</span>
+<span class="cmd-prefix">$ </span>photo-sort sort /chemin/vers/photos
+
+<span class="comment"># Dossier de sortie personnalise</span>
+<span class="cmd-prefix">$ </span>photo-sort sort /chemin/vers/photos -o /chemin/vers/sortie
+
+<span class="comment"># Fusionner plusieurs sources</span>
+<span class="cmd-prefix">$ </span>photo-sort sort /photos/vacances -o /photos/triees
+<span class="cmd-prefix">$ </span>photo-sort sort /photos/telephone -o /photos/triees</code></pre>
+
+<h3>Taguer et noter</h3>
+<pre><code><span class="cmd-prefix">$ </span>photo-sort tag /photos/triees 2008/2008-07-15_14-30-22.jpg vacances
+<span class="cmd-prefix">$ </span>photo-sort tag /photos/triees 2008/2008-07-15_14-30-22.jpg vacances --remove
+<span class="cmd-prefix">$ </span>photo-sort rate /photos/triees 2008/2008-07-15_14-30-22.jpg 5</code></pre>
+
+<h3>Generer la galerie statique</h3>
+<pre><code><span class="cmd-prefix">$ </span>photo-sort gallery /photos/triees
+<span class="comment"># Ouvrir gallery.html dans un navigateur</span></code></pre>
+
+<h3>Galerie interactive (mode serveur)</h3>
+<pre><code><span class="cmd-prefix">$ </span>photo-sort serve /photos/triees
+<span class="comment"># Ouvre http://localhost:8080</span>
+
+<span class="cmd-prefix">$ </span>photo-sort serve /photos/triees -p 3000
+<span class="comment"># Port personnalise</span></code></pre>
+
+<h3>Exporter des fichiers filtres</h3>
+<pre><code><span class="cmd-prefix">$ </span>photo-sort export /photos/triees /export/vacances --tag vacances
+<span class="cmd-prefix">$ </span>photo-sort export /photos/triees /export/meilleures --rating 4
+<span class="cmd-prefix">$ </span>photo-sort export /photos/triees /export/top --tag vacances --rating 4</code></pre>
+</section>
+
+<!-- Galerie -->
+<section>
+<h2><span class="icon">&#127748;</span> Galerie web</h2>
+<ul class="features">
+  <li>Grille responsive groupee par annee</li>
+  <li>Lightbox avec navigation clavier</li>
+  <li>Diaporama sequentiel ou aleatoire (1-15 s)</li>
+  <li>Chargement progressif (miniature puis HD)</li>
+  <li>Filtres par tag et note minimale</li>
+  <li>Edition de tags inline + suggestions</li>
+  <li>Notation par etoiles cliquables (0-5)</li>
+  <li>Telechargement individuel</li>
+  <li>Consultation des metadonnees EXIF</li>
+  <li>Miniatures generees automatiquement</li>
+</ul>
+
+<h3>Mode serveur : fonctionnalites supplementaires</h3>
+<ul class="features">
+  <li>Sauvegarde directe des tags et notes</li>
+  <li>Suppression avec confirmation</li>
+  <li>Deplacement vers un autre dossier</li>
+  <li>Rotation 90/180/270 degres</li>
+  <li>Modale metadonnees EXIF</li>
+  <li>Pre-generation des miniatures</li>
+</ul>
+</section>
+
+<!-- API -->
+<section>
+<h2><span class="icon">&#128268;</span> API REST (mode serveur)</h2>
+<table>
+<tr><th>Endpoint</th><th>Description</th></tr>
+<tr><td><span class="api-method api-get">GET</span> <code>/</code></td><td>Galerie HTML (servie depuis le cache)</td></tr>
+<tr><td><span class="api-method api-get">GET</span> <code>/thumb/{path}</code></td><td>Miniature JPEG d'une photo</td></tr>
+<tr><td><span class="api-method api-get">GET</span> <code>/api/exif?path=...</code></td><td>Metadonnees EXIF + taille + dimensions</td></tr>
+<tr><td><span class="api-method api-post">POST</span> <code>/api/metadata</code></td><td>Sauvegarder tags et notes</td></tr>
+<tr><td><span class="api-method api-post">POST</span> <code>/api/move</code></td><td>Deplacer une photo vers un autre dossier</td></tr>
+<tr><td><span class="api-method api-post">POST</span> <code>/api/rotate</code></td><td>Rotation d'une image (90, 180, 270)</td></tr>
+<tr><td><span class="api-method api-delete">DEL</span> <code>/api/photo?path=...</code></td><td>Supprimer une photo</td></tr>
+</table>
+</section>
+
+<!-- Detection de date -->
+<section>
+<h2><span class="icon">&#128197;</span> Detection de date</h2>
+<table>
+<tr><th>Priorite</th><th>Methode</th><th>Description</th></tr>
+<tr><td><span class="prio prio-1">1</span></td><td>EXIF</td><td><code>DateTimeOriginal</code>, <code>DateTimeDigitized</code>, <code>DateTime</code></td></tr>
+<tr><td><span class="prio prio-2">2</span></td><td>Dossier</td><td>Regex <code>(19|20)\d{2}</code> dans le chemin du fichier</td></tr>
+<tr><td><span class="prio prio-3">3</span></td><td>Systeme</td><td>Date de creation ou modification du fichier</td></tr>
+</table>
+</section>
+
+<!-- Formats -->
+<section>
+<h2><span class="icon">&#128444;</span> Formats supportes</h2>
+<p style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">jpg</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">jpeg</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">png</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">heic</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">heif</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">cr2</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">cr3</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">nef</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">arw</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">dng</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">orf</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">rw2</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">raf</code>
+  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">tiff</code>
+</p>
+</section>
+
+<!-- Fichiers generes -->
+<section>
+<h2><span class="icon">&#128193;</span> Fichiers generes</h2>
+<table>
+<tr><th>Fichier</th><th>Description</th></tr>
+<tr><td><code>.photo_sort_progress.json</code></td><td>Progression + correspondance source/destination/hash</td></tr>
+<tr><td><code>.photo_sort_metadata.json</code></td><td>Tags et notes par fichier</td></tr>
+<tr><td><code>.photo_sort_origins</code></td><td>Correspondance nouveau nom / chemin original (par dossier annee)</td></tr>
+<tr><td><code>.photo_sort_thumbs/</code></td><td>Cache des miniatures JPEG (mode serveur)</td></tr>
+<tr><td><code>gallery.html</code></td><td>Galerie HTML autonome</td></tr>
+</table>
+</section>
+
+<!-- Tests -->
+<section>
+<h2><span class="icon">&#9989;</span> Tests</h2>
+<pre><code><span class="cmd-prefix">$ </span>cargo test</code></pre>
+<p>130 tests unitaires couvrant : tri, detection de date, renommage, collisions, hash BLAKE3, progression, metadata (tags/notes), galerie HTML, export filtre, serveur HTTP (API delete/move/rotate/metadata/exif), miniatures.</p>
+</section>
+
+</div>
+
+<footer>
+  <p><strong>photo-sort</strong> &mdash; MIT &mdash; <a href="https://github.com/yrbane/photo-sort">github.com/yrbane/photo-sort</a></p>
+</footer>
+
+</body>
+</html>
