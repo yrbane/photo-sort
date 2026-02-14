@@ -12,6 +12,9 @@ pub fn collect_photos(dir: &Path) -> HashMap<String, Vec<String>> {
 
     for entry in WalkDir::new(dir)
         .into_iter()
+        .filter_entry(|e| {
+            e.file_name().to_string_lossy() != crate::thumb::THUMB_DIR
+        })
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file() && is_photo(e.path()))
     {
@@ -96,7 +99,7 @@ pub fn generate_html(photos_by_year: &HashMap<String, Vec<String>>, metadata: &M
                 };
                 grid_html.push_str(&format!(
                     "  <div class=\"thumb\" data-idx=\"{}\" data-tags=\"{}\" data-rating=\"{}\">\
-                    <img src=\"{}\" alt=\"{}\" loading=\"lazy\"><div class=\"thumb-stars\">{}</div><div class=\"info\">{}</div></div>\n",
+                    <img data-src=\"{}\" class=\"lazy\" alt=\"{}\"><div class=\"thumb-stars\">{}</div><div class=\"info\">{}</div></div>\n",
                     photo_entries.len() - total_count + i,
                     escape_html(&tags_attr),
                     rating,
@@ -162,6 +165,8 @@ main{{padding:1rem 2rem 4rem}}
 .thumb{{position:relative;aspect-ratio:1;overflow:hidden;border-radius:4px;cursor:pointer;transition:transform .2s}}
 .thumb:hover{{transform:scale(1.03);z-index:1}}
 .thumb img{{width:100%;height:100%;object-fit:cover}}
+.thumb img.lazy{{opacity:0;transition:opacity .3s}}
+.thumb img.loaded{{opacity:1}}
 .thumb .info{{position:absolute;bottom:0;left:0;right:0;padding:.3rem .5rem;background:linear-gradient(transparent,rgba(0,0,0,.8));font-size:.7rem;color:#ccc;opacity:0;transition:opacity .2s}}
 .thumb:hover .info{{opacity:1}}
 .thumb.hidden{{display:none}}
@@ -290,7 +295,15 @@ main{{padding:1rem 2rem 4rem}}
 
 <script>
 const ALL_PHOTOS={photos_json};
+const photoMap=new Map();
+ALL_PHOTOS.forEach(p=>photoMap.set(p.src,p));
+const thumbMap=new Map();
+document.querySelectorAll('.thumb').forEach(el=>{{
+  const src=el.querySelector('img').getAttribute('data-src');
+  if(src)thumbMap.set(src,el);
+}});
 let filtered=ALL_PHOTOS.slice();
+let filteredSet=new Set(ALL_PHOTOS.map(p=>p.src));
 let currentIdx=0;
 let slideshowInterval=null;
 let slideshowDelay=5000;
@@ -298,6 +311,13 @@ let slideshowRandom=false;
 let activeTag="";
 let minRating=0;
 let hasChanges=false;
+let allTagsCache=null;
+function rebuildTagCache(){{
+  const s=new Set();
+  ALL_PHOTOS.forEach(p=>p.tags.forEach(t=>s.add(t)));
+  allTagsCache=[...s].sort();
+}}
+rebuildTagCache();
 
 function toast(msg){{
   const t=document.getElementById('toast');
@@ -310,13 +330,16 @@ function markDirty(){{
   document.getElementById('btn-save').classList.add('has-changes');
 }}
 
+let prevTagsKey='';
 function refreshFilterBar(){{
-  const allTags=new Set();
-  ALL_PHOTOS.forEach(p=>p.tags.forEach(t=>allTags.add(t)));
+  rebuildTagCache();
+  const key=allTagsCache.join('\0');
   const container=document.getElementById('filter-tags-container');
   if(!container)return;
+  if(key===prevTagsKey)return;
+  prevTagsKey=key;
   container.innerHTML='<button class="tag-btn'+(activeTag?'':' active')+'" data-tag="">Tous</button>';
-  [...allTags].sort().forEach(tag=>{{
+  allTagsCache.forEach(tag=>{{
     const btn=document.createElement('button');
     btn.className='tag-btn'+(activeTag===tag?' active':'');
     btn.dataset.tag=tag;btn.textContent=tag;
@@ -338,18 +361,19 @@ function applyFilters(){{
     if(minRating>0&&p.rating<minRating)return false;
     return true;
   }});
-  document.querySelectorAll('.thumb').forEach(el=>{{
-    const src=el.querySelector('img').getAttribute('src');
-    const photo=ALL_PHOTOS.find(p=>p.src===src);
-    const match=filtered.some(p=>p.src===src);
+  filteredSet=new Set(filtered.map(p=>p.src));
+  const yearCounts={{}};
+  filtered.forEach(p=>{{yearCounts[p.year]=(yearCounts[p.year]||0)+1;}});
+  thumbMap.forEach((el,src)=>{{
+    const match=filteredSet.has(src);
     el.classList.toggle('hidden',!match);
-    // Update thumbnail stars
+    const photo=photoMap.get(src);
     const starsEl=el.querySelector('.thumb-stars');
     if(starsEl&&photo)starsEl.textContent=photo.rating?'★'.repeat(photo.rating):'';
   }});
   document.querySelectorAll('.year-header').forEach(h=>{{
     const year=h.dataset.year;
-    const count=filtered.filter(p=>p.year===year).length;
+    const count=yearCounts[year]||0;
     h.querySelector('.count').textContent=count;
     h.style.display=count?'':'none';
     const grid=document.querySelector(`.grid[data-year="${{year}}"]`);
@@ -419,9 +443,8 @@ function renderLbTags(photo){{
 function renderTagSuggestions(photo){{
   const container=document.getElementById('tag-suggestions');
   container.innerHTML='';
-  const allTags=new Set();
-  ALL_PHOTOS.forEach(p=>p.tags.forEach(t=>allTags.add(t)));
-  const suggestions=[...allTags].filter(t=>!photo.tags.includes(t)).sort();
+  const photoTagSet=new Set(photo.tags);
+  const suggestions=allTagsCache.filter(t=>!photoTagSet.has(t));
   suggestions.forEach(tag=>{{
     const chip=document.createElement('span');
     chip.className='tag-sug';
@@ -435,6 +458,7 @@ function addTag(photo,tag){{
   if(!tag||photo.tags.includes(tag))return;
   photo.tags.push(tag);
   markDirty();
+  rebuildTagCache();
   renderLbTags(photo);
   refreshFilterBar();
   applyFilters();
@@ -444,6 +468,7 @@ function addTag(photo,tag){{
 function removeTag(photo,tag){{
   photo.tags=photo.tags.filter(t=>t!==tag);
   markDirty();
+  rebuildTagCache();
   renderLbTags(photo);
   refreshFilterBar();
   applyFilters();
@@ -504,7 +529,7 @@ document.getElementById('lb-next').addEventListener('click',()=>{{showPhoto(curr
 
 document.querySelectorAll('.thumb').forEach(el=>{{
   el.addEventListener('click',()=>{{
-    const src=el.querySelector('img').getAttribute('src');
+    const src=el.querySelector('img').getAttribute('data-src');
     const idx=filtered.findIndex(p=>p.src===src);
     if(idx>=0)openLightbox(idx);
   }});
@@ -625,11 +650,12 @@ function deletePhoto(){{
         if(d.ok){{
           const gi=ALL_PHOTOS.indexOf(p);
           if(gi>=0)ALL_PHOTOS.splice(gi,1);
+          photoMap.delete(p.src);
           filtered=filtered.filter(x=>x!==p);
+          filteredSet.delete(p.src);
           // Remove from grid
-          document.querySelectorAll('.thumb').forEach(el=>{{
-            if(el.querySelector('img').getAttribute('src')===p.src)el.remove();
-          }});
+          const thumbEl=thumbMap.get(p.src);
+          if(thumbEl){{thumbEl.remove();thumbMap.delete(p.src);}}
           applyFilters();refreshFilterBar();
           if(filtered.length===0)closeLightbox();
           else showPhoto(Math.min(currentIdx,filtered.length-1));
@@ -657,10 +683,14 @@ function movePhoto(){{
         if(d.ok){{
           const oldSrc=p.src;
           p.src=d.new_path;p.year=dest;p.name=p.src.split('/').pop();
-          // Update grid image
-          document.querySelectorAll('.thumb img').forEach(img=>{{
-            if(img.getAttribute('src')===oldSrc)img.src=p.src;
-          }});
+          // Update maps and grid image
+          photoMap.delete(oldSrc);photoMap.set(p.src,p);
+          const movedEl=thumbMap.get(oldSrc);
+          if(movedEl){{
+            thumbMap.delete(oldSrc);thumbMap.set(p.src,movedEl);
+            const img=movedEl.querySelector('img');
+            if(img){{img.setAttribute('data-src',p.src);img.src=getSrc(p.src);}}
+          }}
           markDirty();applyFilters();refreshFilterBar();
           showPhoto(currentIdx);
           toast(p.name+' déplacé vers '+dest);
@@ -715,6 +745,23 @@ document.getElementById('btn-export').addEventListener('click',exportFiltered);
 window.addEventListener('beforeunload',e=>{{
   if(hasChanges){{e.preventDefault();e.returnValue='';}}
 }});
+
+// Lazy loading with IntersectionObserver
+function getSrc(dataSrc){{return isServed?'/thumb/'+dataSrc:dataSrc;}}
+const lazyObserver=new IntersectionObserver((entries)=>{{
+  entries.forEach(entry=>{{
+    if(entry.isIntersecting){{
+      const img=entry.target;
+      const dataSrc=img.getAttribute('data-src');
+      if(dataSrc){{
+        img.src=getSrc(dataSrc);
+        img.addEventListener('load',()=>img.classList.add('loaded'),{{once:true}});
+        lazyObserver.unobserve(img);
+      }}
+    }}
+  }});
+}},{{rootMargin:'200px'}});
+document.querySelectorAll('img.lazy').forEach(img=>lazyObserver.observe(img));
 
 // Init
 document.querySelector('.slideshow-controls').style.display='none';
@@ -1175,6 +1222,78 @@ mod tests {
 
         // In serve mode, save uses fetch to /api/metadata
         assert!(html.contains("/api/metadata"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Lazy loading ---
+
+    #[test]
+    fn html_uses_data_src_for_lazy_loading() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        // Grid images should use data-src, not src
+        assert!(html.contains("data-src=\"2020/2020-01-01_00-00-00.jpg\""));
+        assert!(html.contains("class=\"lazy\""));
+        // Should NOT have src= on grid images (only data-src)
+        assert!(!html.contains("<img src=\"2020/"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_intersection_observer() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("IntersectionObserver"));
+        assert!(html.contains("lazyObserver"));
+        assert!(html.contains("rootMargin"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_get_src_helper() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("getSrc"));
+        assert!(html.contains("/thumb/"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_lazy_css() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("img.lazy"));
+        assert!(html.contains("img.loaded"));
+        assert!(html.contains("opacity:0"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_applyfilters_uses_data_src() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        // applyFilters and click handler should use getAttribute('data-src')
+        assert!(html.contains("getAttribute('data-src')"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

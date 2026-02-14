@@ -1,11 +1,81 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 use crate::gallery::{collect_photos, generate_html};
 use crate::metadata::Metadata;
+use crate::thumb;
+
+/// Server state: caches the photo index and generated HTML.
+pub struct ServerState {
+    pub dir: PathBuf,
+    metadata: Mutex<Metadata>,
+    photo_index: Mutex<HashMap<String, Vec<String>>>,
+    html_cache: Mutex<Option<Arc<String>>>,
+    cache_gen: AtomicU64,
+}
+
+impl ServerState {
+    /// Build the initial state: canonicalize dir, load metadata, collect photos,
+    /// and pre-generate the HTML so the first request is instant.
+    pub fn new(dir: &Path) -> Result<Arc<Self>> {
+        let dir = dir
+            .canonicalize()
+            .with_context(|| format!("Dossier introuvable : {}", dir.display()))?;
+        let metadata = Metadata::load(&dir)?;
+        let photo_index = collect_photos(&dir);
+        let html = generate_html(&photo_index, &metadata);
+        Ok(Arc::new(Self {
+            dir,
+            metadata: Mutex::new(metadata),
+            photo_index: Mutex::new(photo_index),
+            html_cache: Mutex::new(Some(Arc::new(html))),
+            cache_gen: AtomicU64::new(0),
+        }))
+    }
+
+    /// Return the cached HTML, regenerating it if the cache was invalidated.
+    pub fn get_cached_html(&self) -> Arc<String> {
+        // Fast path: cache hit
+        {
+            let cache = self.html_cache.lock().unwrap();
+            if let Some(ref html) = *cache {
+                return Arc::clone(html);
+            }
+        }
+
+        // Slow path: regenerate
+        let gen_before = self.cache_gen.load(Ordering::Acquire);
+        let index = self.photo_index.lock().unwrap().clone();
+        let meta = self.metadata.lock().unwrap();
+        let html = Arc::new(generate_html(&index, &meta));
+        drop(meta);
+
+        // Only store if no mutation happened while we were generating
+        let gen_after = self.cache_gen.load(Ordering::Acquire);
+        if gen_before == gen_after {
+            let mut cache = self.html_cache.lock().unwrap();
+            *cache = Some(Arc::clone(&html));
+        }
+        html
+    }
+
+    /// Bump the generation counter and clear the HTML cache.
+    fn invalidate_cache(&self) {
+        self.cache_gen.fetch_add(1, Ordering::Release);
+        let mut cache = self.html_cache.lock().unwrap();
+        *cache = None;
+    }
+
+    /// Return all relative photo paths (flat list) from the index.
+    pub fn all_photo_rels(&self) -> Vec<String> {
+        let index = self.photo_index.lock().unwrap();
+        index.values().flat_map(|v| v.iter().cloned()).collect()
+    }
+}
 
 /// MIME type from file extension.
 fn mime_type(path: &Path) -> &'static str {
@@ -116,23 +186,27 @@ pub fn safe_path(base: &Path, relative: &str) -> Option<PathBuf> {
     }
 }
 
+/// Extract the year (first path component, 4 digits) from a relative path.
+fn year_of(rel: &str) -> Option<&str> {
+    let year = rel.split('/').next()?;
+    if year.len() == 4 && year.chars().all(|c| c.is_ascii_digit()) {
+        Some(year)
+    } else {
+        None
+    }
+}
+
 /// Handle a single HTTP request.
-pub fn handle_request(
-    mut req: Request,
-    dir: &Path,
-    metadata: &Arc<Mutex<Metadata>>,
-) {
+pub fn handle_request(mut req: Request, state: &ServerState) {
     let url = req.url().to_string();
     let method = req.method().clone();
     let path = url.split('?').next().unwrap_or(&url);
 
     match (&method, path) {
-        // Gallery HTML
+        // Gallery HTML — served from cache
         (&Method::Get, "/") => {
-            let meta = metadata.lock().unwrap();
-            let photos = collect_photos(dir);
-            let html = generate_html(&photos, &meta);
-            let resp = Response::from_string(html).with_header(
+            let html = state.get_cached_html();
+            let resp = Response::from_string(html.as_str()).with_header(
                 Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..])
                     .unwrap(),
             );
@@ -144,10 +218,12 @@ pub fn handle_request(
             match read_body(&mut req) {
                 Ok(body) => match serde_json::from_str::<Metadata>(&body) {
                     Ok(new_meta) => {
-                        let mut meta = metadata.lock().unwrap();
+                        let mut meta = state.metadata.lock().unwrap();
                         *meta = new_meta;
-                        match meta.save(dir) {
+                        match meta.save(&state.dir) {
                             Ok(()) => {
+                                drop(meta);
+                                state.invalidate_cache();
                                 let _ = req.respond(json_ok("Metadata sauvegardé"));
                             }
                             Err(e) => {
@@ -169,13 +245,28 @@ pub fn handle_request(
         (&Method::Delete, "/api/photo") => {
             let params = parse_query(&url);
             if let Some(file) = params.get("path") {
-                if let Some(full_path) = safe_path(dir, file) {
+                if let Some(full_path) = safe_path(&state.dir, file) {
                     if full_path.exists() {
                         match std::fs::remove_file(&full_path) {
                             Ok(()) => {
-                                let mut meta = metadata.lock().unwrap();
-                                meta.files.remove(file.as_str());
-                                let _ = meta.save(dir);
+                                thumb::invalidate_thumb(&state.dir, file);
+                                // Update metadata
+                                {
+                                    let mut meta = state.metadata.lock().unwrap();
+                                    meta.files.remove(file.as_str());
+                                    let _ = meta.save(&state.dir);
+                                }
+                                // Update photo index in-place
+                                if let Some(year) = year_of(file) {
+                                    let mut index = state.photo_index.lock().unwrap();
+                                    if let Some(files) = index.get_mut(year) {
+                                        files.retain(|f| f != file);
+                                        if files.is_empty() {
+                                            index.remove(year);
+                                        }
+                                    }
+                                }
+                                state.invalidate_cache();
                                 let _ = req.respond(json_ok("Fichier supprimé"));
                             }
                             Err(e) => {
@@ -204,7 +295,7 @@ pub fn handle_request(
                     }
                     match serde_json::from_str::<MoveReq>(&body) {
                         Ok(mv) => {
-                            let src_path = match safe_path(dir, &mv.src) {
+                            let src_path = match safe_path(&state.dir, &mv.src) {
                                 Some(p) => p,
                                 None => {
                                     let _ = req.respond(json_error(400, "Chemin source invalide"));
@@ -215,7 +306,7 @@ pub fn handle_request(
                                 let _ = req.respond(json_error(404, "Fichier source introuvable"));
                                 return;
                             }
-                            let dest_subdir = dir.join(&mv.dest_dir);
+                            let dest_subdir = state.dir.join(&mv.dest_dir);
                             if let Err(e) = std::fs::create_dir_all(&dest_subdir) {
                                 let _ = req.respond(json_error(500, &e.to_string()));
                                 return;
@@ -228,12 +319,40 @@ pub fn handle_request(
                             let dest_path = dest_subdir.join(&filename);
                             match std::fs::rename(&src_path, &dest_path) {
                                 Ok(()) => {
+                                    thumb::invalidate_thumb(&state.dir, &mv.src);
                                     let new_rel = format!("{}/{}", mv.dest_dir, filename);
-                                    let mut meta = metadata.lock().unwrap();
-                                    if let Some(info) = meta.files.remove(mv.src.as_str()) {
-                                        meta.files.insert(new_rel.clone(), info);
+                                    // Update metadata
+                                    {
+                                        let mut meta = state.metadata.lock().unwrap();
+                                        if let Some(info) = meta.files.remove(mv.src.as_str()) {
+                                            meta.files.insert(new_rel.clone(), info);
+                                        }
+                                        let _ = meta.save(&state.dir);
                                     }
-                                    let _ = meta.save(dir);
+                                    // Update photo index in-place
+                                    {
+                                        let mut index = state.photo_index.lock().unwrap();
+                                        // Remove from old year
+                                        if let Some(old_year) = year_of(&mv.src) {
+                                            if let Some(files) = index.get_mut(old_year) {
+                                                files.retain(|f| f != &mv.src);
+                                                if files.is_empty() {
+                                                    index.remove(old_year);
+                                                }
+                                            }
+                                        }
+                                        // Insert into new year (sorted)
+                                        if let Some(new_year) = year_of(&new_rel) {
+                                            let files = index
+                                                .entry(new_year.to_string())
+                                                .or_default();
+                                            let pos = files
+                                                .binary_search(&new_rel)
+                                                .unwrap_or_else(|i| i);
+                                            files.insert(pos, new_rel.clone());
+                                        }
+                                    }
+                                    state.invalidate_cache();
                                     let resp_body = format!(
                                         "{{\"ok\":\"Fichier déplacé\",\"new_path\":\"{}\"}}",
                                         new_rel.replace('"', "\\\"")
@@ -263,7 +382,7 @@ pub fn handle_request(
             }
         }
 
-        // API: Rotate photo
+        // API: Rotate photo — no HTML invalidation (JS cache-busts the image)
         (&Method::Post, "/api/rotate") => {
             match read_body(&mut req) {
                 Ok(body) => {
@@ -281,7 +400,7 @@ pub fn handle_request(
                                 ));
                                 return;
                             }
-                            let full_path = match safe_path(dir, &rot.path) {
+                            let full_path = match safe_path(&state.dir, &rot.path) {
                                 Some(p) => p,
                                 None => {
                                     let _ = req.respond(json_error(400, "Chemin invalide"));
@@ -295,6 +414,7 @@ pub fn handle_request(
                             }
                             match rotate_image(&full_path, rot.angle) {
                                 Ok(()) => {
+                                    thumb::invalidate_thumb(&state.dir, &rot.path);
                                     let _ = req.respond(json_ok("Photo tournée"));
                                 }
                                 Err(e) => {
@@ -313,10 +433,50 @@ pub fn handle_request(
             }
         }
 
+        // Thumbnail serving
+        (&Method::Get, _) if path.starts_with("/thumb/") => {
+            let rel = &path[7..]; // strip "/thumb/"
+            if let Some(full_path) = safe_path(&state.dir, rel) {
+                if !full_path.is_file() {
+                    let _ = req.respond(json_error(404, "Fichier introuvable"));
+                    return;
+                }
+                // Try to serve thumbnail; fall back to original on error or unsupported format
+                let serve_path = match thumb::get_or_create_thumb(&state.dir, rel) {
+                    Ok(Some(thumb_path)) => thumb_path,
+                    _ => full_path,
+                };
+                match std::fs::File::open(&serve_path) {
+                    Ok(file) => {
+                        let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+                        let mime = mime_type(&serve_path);
+                        let resp = Response::from_file(file)
+                            .with_header(
+                                Header::from_bytes(&b"Content-Type"[..], mime.as_bytes())
+                                    .unwrap(),
+                            )
+                            .with_header(
+                                Header::from_bytes(
+                                    &b"Content-Length"[..],
+                                    len.to_string().as_bytes(),
+                                )
+                                .unwrap(),
+                            );
+                        let _ = req.respond(resp);
+                    }
+                    Err(_) => {
+                        let _ = req.respond(json_error(500, "Erreur lecture fichier"));
+                    }
+                }
+            } else {
+                let _ = req.respond(json_error(400, "Chemin invalide"));
+            }
+        }
+
         // Static file serving
         (&Method::Get, _) => {
             let rel = &path[1..]; // strip leading /
-            if let Some(full_path) = safe_path(dir, rel) {
+            if let Some(full_path) = safe_path(&state.dir, rel) {
                 if full_path.is_file() {
                     match std::fs::File::open(&full_path) {
                         Ok(file) => {
@@ -371,11 +531,12 @@ pub fn rotate_image(path: &Path, angle: u16) -> Result<()> {
 
 /// Start the HTTP server.
 pub fn run_serve(dir: &Path, port: u16) -> Result<()> {
-    let dir = dir
-        .canonicalize()
-        .with_context(|| format!("Dossier introuvable : {}", dir.display()))?;
+    let state = ServerState::new(dir)?;
 
-    let metadata = Arc::new(Mutex::new(Metadata::load(&dir)?));
+    // Pre-generate thumbnails in the background
+    let all_rels = state.all_photo_rels();
+    thumb::spawn_prewarm(state.dir.clone(), all_rels);
+
     let addr = format!("0.0.0.0:{port}");
     let server =
         Server::http(&addr).map_err(|e| anyhow::anyhow!("Impossible de démarrer le serveur: {e}"))?;
@@ -391,10 +552,9 @@ pub fn run_serve(dir: &Path, port: u16) -> Result<()> {
     );
 
     for req in server.incoming_requests() {
-        let dir = dir.clone();
-        let metadata = metadata.clone();
+        let state = Arc::clone(&state);
         std::thread::spawn(move || {
-            handle_request(req, &dir, &metadata);
+            handle_request(req, &state);
         });
     }
 
@@ -404,12 +564,12 @@ pub fn run_serve(dir: &Path, port: u16) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
 
     static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
     fn tmpdir() -> PathBuf {
-        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let id = TEST_COUNTER.fetch_add(1, AtomicOrdering::SeqCst);
         let dir = std::env::temp_dir().join(format!(
             "photo_sort_serve_test_{}_{id}",
             std::process::id()
@@ -489,21 +649,18 @@ mod tests {
     }
 
     // --- Integration: handle_request with real server ---
-    // We test API logic by spawning a tiny_http server on a random port
 
-    fn spawn_test_server(dir: &Path) -> (u16, Arc<Mutex<Metadata>>) {
-        let metadata = Arc::new(Mutex::new(Metadata::load(dir).unwrap()));
-        // port 0 = OS picks a free port
+    fn spawn_test_server(dir: &Path) -> (u16, Arc<ServerState>) {
+        let state = ServerState::new(dir).unwrap();
         let server = Server::http("127.0.0.1:0").unwrap();
         let port = server.server_addr().to_ip().unwrap().port();
-        let dir = dir.to_path_buf();
-        let meta_clone = metadata.clone();
+        let state_clone = Arc::clone(&state);
         std::thread::spawn(move || {
             for req in server.incoming_requests() {
-                handle_request(req, &dir, &meta_clone);
+                handle_request(req, &state_clone);
             }
         });
-        (port, metadata)
+        (port, state)
     }
 
     #[test]
@@ -544,7 +701,7 @@ mod tests {
     fn api_delete_photo() {
         let tmp = tmpdir();
         setup_photos(&tmp);
-        let (port, _meta) = spawn_test_server(&tmp);
+        let (port, _state) = spawn_test_server(&tmp);
 
         assert!(tmp.join("2020/a.jpg").exists());
         let resp = ureq_delete(&format!(
@@ -601,6 +758,63 @@ mod tests {
         let meta = Metadata::load(&tmp).unwrap();
         assert_eq!(meta.get_tags("2020/a.jpg"), &["test"]);
         assert_eq!(meta.get_rating("2020/a.jpg"), Some(5));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Cache tests ---
+
+    #[test]
+    fn html_cache_hit() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let state = ServerState::new(&tmp).unwrap();
+
+        let html1 = state.get_cached_html();
+        let html2 = state.get_cached_html();
+        // Both should point to the same Arc allocation
+        assert!(Arc::ptr_eq(&html1, &html2));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn cache_invalidated_after_delete() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let (port, state) = spawn_test_server(&tmp);
+
+        let html_before = state.get_cached_html();
+        assert!(html_before.contains("a.jpg"));
+
+        let resp = ureq_delete(&format!(
+            "http://127.0.0.1:{port}/api/photo?path=2020/a.jpg"
+        ));
+        assert!(resp.contains("ok"));
+
+        let html_after = state.get_cached_html();
+        assert!(!Arc::ptr_eq(&html_before, &html_after));
+        assert!(!html_after.contains("2020/a.jpg"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn cache_invalidated_after_move() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let (port, state) = spawn_test_server(&tmp);
+
+        let html_before = state.get_cached_html();
+        assert!(html_before.contains("2020/a.jpg"));
+
+        let body = r#"{"src":"2020/a.jpg","dest_dir":"2021"}"#;
+        let resp = ureq_post(
+            &format!("http://127.0.0.1:{port}/api/move"),
+            body,
+        );
+        assert!(resp.contains("ok"));
+
+        let html_after = state.get_cached_html();
+        assert!(!html_after.contains("2020/a.jpg"));
+        assert!(html_after.contains("2021/a.jpg"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
@@ -678,5 +892,97 @@ mod tests {
             }
         }
         result.trim().to_string()
+    }
+
+    fn ureq_get_bytes(url: &str) -> Vec<u8> {
+        use std::io::{Read, Write};
+        use std::net::TcpStream;
+        let url = url.strip_prefix("http://").unwrap();
+        let (host, path) = url.split_once('/').unwrap_or((url, ""));
+        let path = format!("/{path}");
+        let mut stream = TcpStream::connect(host).unwrap();
+        write!(stream, "GET {path} HTTP/1.0\r\nHost: {host}\r\n\r\n").unwrap();
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).unwrap();
+        // Split at \r\n\r\n to get body
+        let sep = b"\r\n\r\n";
+        if let Some(pos) = buf.windows(4).position(|w| w == sep) {
+            buf[pos + 4..].to_vec()
+        } else {
+            buf
+        }
+    }
+
+    /// Create a real JPEG image for integration tests.
+    fn create_test_jpeg(path: &Path) {
+        let img = image::RgbImage::from_fn(100, 80, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, 128])
+        });
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        img.save(path).unwrap();
+    }
+
+    // --- Thumbnail endpoint ---
+
+    #[test]
+    fn thumb_endpoint_returns_jpeg() {
+        let tmp = tmpdir();
+        let y = tmp.join("2020");
+        std::fs::create_dir_all(&y).unwrap();
+        create_test_jpeg(&y.join("photo.jpg"));
+
+        let (port, _) = spawn_test_server(&tmp);
+
+        let bytes = ureq_get_bytes(&format!("http://127.0.0.1:{port}/thumb/2020/photo.jpg"));
+        // JPEG starts with FF D8
+        assert!(bytes.len() > 2);
+        assert_eq!(bytes[0], 0xFF);
+        assert_eq!(bytes[1], 0xD8);
+
+        // Cache file should exist
+        let cache = tmp.join(".photo_sort_thumbs/2020/photo.jpg");
+        assert!(cache.exists());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn thumb_endpoint_fallback_for_heic() {
+        let tmp = tmpdir();
+        let y = tmp.join("2020");
+        std::fs::create_dir_all(&y).unwrap();
+        std::fs::write(y.join("photo.heic"), "fake heic data").unwrap();
+
+        let (port, _) = spawn_test_server(&tmp);
+
+        // Should fall back to serving the original file
+        let resp = ureq_get(&format!("http://127.0.0.1:{port}/thumb/2020/photo.heic"));
+        assert_eq!(resp, "fake heic data");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn thumb_endpoint_404_for_missing() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let (port, _) = spawn_test_server(&tmp);
+
+        let resp = ureq_get(&format!("http://127.0.0.1:{port}/thumb/2020/nonexistent.jpg"));
+        assert!(resp.contains("error"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn thumb_endpoint_rejects_traversal() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let (port, _) = spawn_test_server(&tmp);
+
+        let resp = ureq_get(&format!(
+            "http://127.0.0.1:{port}/thumb/../../../etc/passwd"
+        ));
+        assert!(resp.contains("error"));
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

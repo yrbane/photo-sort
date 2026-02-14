@@ -3,6 +3,7 @@ mod gallery;
 mod metadata;
 mod serve;
 mod sort;
+mod thumb;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
