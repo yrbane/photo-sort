@@ -1,3 +1,4 @@
+mod gallery;
 mod metadata;
 mod sort;
 
@@ -131,9 +132,7 @@ fn main() -> Result<()> {
             }
             meta.save(&dir)
         }
-        Commands::Gallery { dir } => {
-            anyhow::bail!("Commande gallery pas encore implémentée (dir: {})", dir.display());
-        }
+        Commands::Gallery { dir } => gallery::run_gallery(&dir),
         Commands::Export {
             dir,
             dest,
