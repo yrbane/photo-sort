@@ -1,3 +1,4 @@
+mod export;
 mod gallery;
 mod metadata;
 mod sort;
@@ -136,14 +137,8 @@ fn main() -> Result<()> {
         Commands::Export {
             dir,
             dest,
-            tag: _,
-            rating: _,
-        } => {
-            anyhow::bail!(
-                "Commande export pas encore implémentée (dir: {}, dest: {})",
-                dir.display(),
-                dest.display()
-            );
-        }
+            tag,
+            rating,
+        } => export::run_export(&dir, &dest, tag.as_deref(), rating),
     }
 }
