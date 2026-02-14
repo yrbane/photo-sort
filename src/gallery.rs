@@ -89,14 +89,20 @@ pub fn generate_html(photos_by_year: &HashMap<String, Vec<String>>, metadata: &M
                 let tags_attr: String = info.tags.join(",");
                 let rating = info.rating.unwrap_or(0);
                 let name = file.rsplit('/').next().unwrap_or(file);
+                let stars_display = if rating > 0 {
+                    "\u{2605}".repeat(rating as usize)
+                } else {
+                    String::new()
+                };
                 grid_html.push_str(&format!(
                     "  <div class=\"thumb\" data-idx=\"{}\" data-tags=\"{}\" data-rating=\"{}\">\
-                    <img src=\"{}\" alt=\"{}\" loading=\"lazy\"><div class=\"info\">{}</div></div>\n",
-                    photo_entries.len() - total_count + i, // Not needed, we use global index from JS
+                    <img src=\"{}\" alt=\"{}\" loading=\"lazy\"><div class=\"thumb-stars\">{}</div><div class=\"info\">{}</div></div>\n",
+                    photo_entries.len() - total_count + i,
                     escape_html(&tags_attr),
                     rating,
                     escape_html(file),
                     escape_html(name),
+                    stars_display,
                     escape_html(name)
                 ));
             }
@@ -107,7 +113,7 @@ pub fn generate_html(photos_by_year: &HashMap<String, Vec<String>>, metadata: &M
     // Tags filter HTML
     let mut tags_filter_html = String::new();
     if !all_tags.is_empty() {
-        tags_filter_html.push_str("<div class=\"filter-group\"><span class=\"filter-label\">Tags</span><div class=\"filter-tags\">");
+        tags_filter_html.push_str("<div class=\"filter-group\"><span class=\"filter-label\">Tags</span><div class=\"filter-tags\" id=\"filter-tags-container\">");
         tags_filter_html.push_str("<button class=\"tag-btn active\" data-tag=\"\">Tous</button>");
         for tag in &all_tags {
             tags_filter_html.push_str(&format!(
@@ -132,8 +138,14 @@ body{{background:#0a0a0a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemF
 header{{position:sticky;top:0;z-index:100;background:rgba(10,10,10,.95);backdrop-filter:blur(12px);padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #222}}
 header h1{{font-size:1.2rem;font-weight:600;color:#4fc3f7}}
 .controls{{display:flex;gap:.5rem;align-items:center}}
-.controls button{{background:#1a1a1a;color:#ccc;border:1px solid #333;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:all .2s}}
+.controls button,.controls .badge{{background:#1a1a1a;color:#ccc;border:1px solid #333;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:all .2s}}
 .controls button:hover,.controls button.active{{background:#4fc3f7;color:#000;border-color:#4fc3f7}}
+.controls button.save-btn{{background:#1a3a1a;color:#6f6;border-color:#363}}
+.controls button.save-btn:hover{{background:#2a5a2a}}
+.controls button.save-btn.has-changes{{animation:pulse 2s infinite}}
+@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:.6}}}}
+.controls button.export-btn{{background:#3a1a1a;color:#f96;border-color:#633}}
+.controls button.export-btn:hover{{background:#5a2a2a}}
 .filter-bar{{padding:.8rem 2rem;background:#111;border-bottom:1px solid #1a1a1a;display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap}}
 .filter-group{{display:flex;gap:.5rem;align-items:center}}
 .filter-label{{font-size:.75rem;text-transform:uppercase;color:#666;letter-spacing:.05em}}
@@ -153,28 +165,45 @@ main{{padding:1rem 2rem 4rem}}
 .thumb .info{{position:absolute;bottom:0;left:0;right:0;padding:.3rem .5rem;background:linear-gradient(transparent,rgba(0,0,0,.8));font-size:.7rem;color:#ccc;opacity:0;transition:opacity .2s}}
 .thumb:hover .info{{opacity:1}}
 .thumb.hidden{{display:none}}
+.thumb .thumb-stars{{position:absolute;top:.3rem;right:.3rem;color:#ffd700;font-size:.7rem;text-shadow:0 1px 3px rgba(0,0,0,.8)}}
 
 /* Lightbox */
 .lightbox{{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.97);flex-direction:column;align-items:center;justify-content:center}}
 .lightbox.open{{display:flex}}
-.lightbox img{{max-width:95vw;max-height:85vh;object-fit:contain;border-radius:4px;user-select:none}}
-.lb-close{{position:absolute;top:1rem;right:1.5rem;font-size:2rem;color:#888;cursor:pointer;z-index:1002;transition:color .2s}}
+.lightbox img#lb-img{{max-width:90vw;max-height:70vh;object-fit:contain;border-radius:4px;user-select:none}}
+.lb-top-bar{{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:.8rem 1.5rem;z-index:1002}}
+.lb-close{{font-size:2rem;color:#888;cursor:pointer;transition:color .2s}}
 .lb-close:hover{{color:#fff}}
-.lb-nav{{position:absolute;top:50%;transform:translateY(-50%);font-size:3rem;color:#555;cursor:pointer;user-select:none;padding:1rem;transition:color .2s}}
+.lb-download{{color:#888;cursor:pointer;font-size:.85rem;text-decoration:none;padding:.3rem .6rem;border:1px solid #444;border-radius:6px;transition:all .2s}}
+.lb-download:hover{{color:#fff;border-color:#888}}
+.lb-nav{{position:absolute;top:50%;transform:translateY(-50%);font-size:3rem;color:#555;cursor:pointer;user-select:none;padding:1rem;transition:color .2s;z-index:1001}}
 .lb-nav:hover{{color:#fff}}
 .lb-prev{{left:1rem}}
 .lb-next{{right:1rem}}
-.lb-info{{margin-top:1rem;text-align:center;color:#999;font-size:.9rem}}
-.lb-info .lb-name{{color:#e0e0e0;font-weight:500}}
-.lb-info .lb-tags{{margin-top:.3rem}}
-.lb-info .lb-tags span{{background:#1a1a1a;padding:.15rem .5rem;border-radius:10px;font-size:.75rem;margin:0 .2rem;color:#4fc3f7}}
-.lb-info .lb-rating{{color:#ffd700;margin-top:.3rem;font-size:1.1rem}}
+.lb-panel{{margin-top:.8rem;text-align:center;color:#999;font-size:.9rem;max-width:600px;width:90vw}}
+.lb-panel .lb-name{{color:#e0e0e0;font-weight:500;margin-bottom:.5rem}}
+.lb-stars{{display:flex;justify-content:center;gap:.15rem;margin:.4rem 0}}
+.lb-stars span{{font-size:1.6rem;cursor:pointer;color:#444;transition:color .15s}}
+.lb-stars span.filled{{color:#ffd700}}
+.lb-stars span:hover,.lb-stars span.hover{{color:#ffed80}}
+.lb-edit-tags{{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem;margin:.4rem 0;align-items:center}}
+.lb-edit-tags .tag-badge{{background:#1a2a3a;color:#4fc3f7;padding:.2rem .5rem;border-radius:10px;font-size:.8rem;display:inline-flex;align-items:center;gap:.3rem}}
+.lb-edit-tags .tag-badge .tag-remove{{cursor:pointer;color:#f66;font-weight:bold;font-size:.9rem}}
+.lb-edit-tags .tag-badge .tag-remove:hover{{color:#f00}}
+.lb-tag-form{{display:inline-flex;gap:.3rem;align-items:center}}
+.lb-tag-form input{{background:#1a1a1a;border:1px solid #333;color:#e0e0e0;padding:.2rem .5rem;border-radius:10px;font-size:.8rem;width:100px;outline:none}}
+.lb-tag-form input:focus{{border-color:#4fc3f7}}
+.lb-tag-form button{{background:#4fc3f7;color:#000;border:none;padding:.2rem .5rem;border-radius:10px;font-size:.8rem;cursor:pointer}}
 .lb-slideshow-bar{{position:absolute;bottom:0;left:0;height:3px;background:#4fc3f7;transition:width linear}}
 
 /* Slideshow controls */
 .slideshow-controls{{position:absolute;bottom:1.5rem;display:flex;gap:.5rem;z-index:1002}}
 .slideshow-controls button{{background:rgba(255,255,255,.1);color:#ccc;border:1px solid #444;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:all .2s}}
 .slideshow-controls button:hover,.slideshow-controls button.active{{background:#4fc3f7;color:#000;border-color:#4fc3f7}}
+
+/* Toast */
+.toast{{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#2a2a2a;color:#fff;padding:.6rem 1.2rem;border-radius:8px;font-size:.85rem;z-index:2000;opacity:0;transition:opacity .3s;pointer-events:none}}
+.toast.show{{opacity:1}}
 
 @media(max-width:600px){{
   .grid{{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:3px}}
@@ -187,8 +216,10 @@ main{{padding:1rem 2rem 4rem}}
 <header>
   <h1>photo-sort gallery</h1>
   <div class="controls">
-    <button id="btn-slideshow" title="Diaporama">Diaporama</button>
-    <button id="btn-random" title="Aléatoire">Aléatoire</button>
+    <button id="btn-slideshow">Diaporama</button>
+    <button id="btn-random">Aléatoire</button>
+    <button id="btn-export" class="export-btn">Exporter filtré</button>
+    <button id="btn-save" class="save-btn">Sauvegarder</button>
   </div>
 </header>
 <div class="filter-bar">
@@ -210,14 +241,23 @@ main{{padding:1rem 2rem 4rem}}
 </main>
 
 <div class="lightbox" id="lightbox">
-  <span class="lb-close" id="lb-close">&times;</span>
+  <div class="lb-top-bar">
+    <a class="lb-download" id="lb-download" download>Télécharger</a>
+    <span class="lb-close" id="lb-close">&times;</span>
+  </div>
   <span class="lb-nav lb-prev" id="lb-prev">&#8249;</span>
   <span class="lb-nav lb-next" id="lb-next">&#8250;</span>
   <img id="lb-img" src="" alt="">
-  <div class="lb-info">
+  <div class="lb-panel">
     <div class="lb-name" id="lb-name"></div>
-    <div class="lb-rating" id="lb-rating"></div>
-    <div class="lb-tags" id="lb-tags"></div>
+    <div class="lb-stars" id="lb-stars">
+      <span data-star="1">&#9733;</span>
+      <span data-star="2">&#9733;</span>
+      <span data-star="3">&#9733;</span>
+      <span data-star="4">&#9733;</span>
+      <span data-star="5">&#9733;</span>
+    </div>
+    <div class="lb-edit-tags" id="lb-edit-tags"></div>
   </div>
   <div class="lb-slideshow-bar" id="lb-bar" style="width:0%"></div>
   <div class="slideshow-controls">
@@ -229,6 +269,8 @@ main{{padding:1rem 2rem 4rem}}
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 const ALL_PHOTOS={photos_json};
 let filtered=ALL_PHOTOS.slice();
@@ -238,6 +280,40 @@ let slideshowDelay=5000;
 let slideshowRandom=false;
 let activeTag="";
 let minRating=0;
+let hasChanges=false;
+
+function toast(msg){{
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2000);
+}}
+
+function markDirty(){{
+  hasChanges=true;
+  document.getElementById('btn-save').classList.add('has-changes');
+}}
+
+function refreshFilterBar(){{
+  const allTags=new Set();
+  ALL_PHOTOS.forEach(p=>p.tags.forEach(t=>allTags.add(t)));
+  const container=document.getElementById('filter-tags-container');
+  if(!container)return;
+  container.innerHTML='<button class="tag-btn'+(activeTag?'':' active')+'" data-tag="">Tous</button>';
+  [...allTags].sort().forEach(tag=>{{
+    const btn=document.createElement('button');
+    btn.className='tag-btn'+(activeTag===tag?' active':'');
+    btn.dataset.tag=tag;btn.textContent=tag;
+    container.appendChild(btn);
+  }});
+  container.querySelectorAll('.tag-btn').forEach(btn=>{{
+    btn.addEventListener('click',()=>{{
+      container.querySelectorAll('.tag-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTag=btn.dataset.tag;
+      applyFilters();
+    }});
+  }});
+}}
 
 function applyFilters(){{
   filtered=ALL_PHOTOS.filter(p=>{{
@@ -245,13 +321,15 @@ function applyFilters(){{
     if(minRating>0&&p.rating<minRating)return false;
     return true;
   }});
-  // Update grid visibility
   document.querySelectorAll('.thumb').forEach(el=>{{
     const src=el.querySelector('img').getAttribute('src');
+    const photo=ALL_PHOTOS.find(p=>p.src===src);
     const match=filtered.some(p=>p.src===src);
     el.classList.toggle('hidden',!match);
+    // Update thumbnail stars
+    const starsEl=el.querySelector('.thumb-stars');
+    if(starsEl&&photo)starsEl.textContent=photo.rating?'★'.repeat(photo.rating):'';
   }});
-  // Update year headers
   document.querySelectorAll('.year-header').forEach(h=>{{
     const year=h.dataset.year;
     const count=filtered.filter(p=>p.year===year).length;
@@ -286,9 +364,66 @@ document.querySelectorAll('#rating-filter button').forEach(btn=>{{
 const lb=document.getElementById('lightbox');
 const lbImg=document.getElementById('lb-img');
 const lbName=document.getElementById('lb-name');
-const lbRating=document.getElementById('lb-rating');
-const lbTags=document.getElementById('lb-tags');
 const lbBar=document.getElementById('lb-bar');
+
+function renderLbStars(rating){{
+  document.querySelectorAll('#lb-stars span').forEach(s=>{{
+    s.classList.toggle('filled',parseInt(s.dataset.star)<=rating);
+  }});
+}}
+
+function renderLbTags(photo){{
+  const container=document.getElementById('lb-edit-tags');
+  container.innerHTML='';
+  photo.tags.forEach(tag=>{{
+    const badge=document.createElement('span');
+    badge.className='tag-badge';
+    badge.innerHTML=tag+' <span class="tag-remove" data-tag="'+tag+'">&times;</span>';
+    container.appendChild(badge);
+  }});
+  // Add tag form
+  const form=document.createElement('span');
+  form.className='lb-tag-form';
+  form.innerHTML='<input type="text" id="lb-tag-input" placeholder="tag...">'
+    +'<button id="lb-tag-add">+</button>';
+  container.appendChild(form);
+  // Event: remove tag
+  container.querySelectorAll('.tag-remove').forEach(btn=>{{
+    btn.addEventListener('click',()=>removeTag(photo,btn.dataset.tag));
+  }});
+  // Event: add tag
+  const addBtn=document.getElementById('lb-tag-add');
+  const input=document.getElementById('lb-tag-input');
+  addBtn.addEventListener('click',()=>addTag(photo,input.value.trim()));
+  input.addEventListener('keydown',e=>{{if(e.key==='Enter'){{e.preventDefault();addTag(photo,input.value.trim());}}}});
+}}
+
+function addTag(photo,tag){{
+  if(!tag||photo.tags.includes(tag))return;
+  photo.tags.push(tag);
+  markDirty();
+  renderLbTags(photo);
+  refreshFilterBar();
+  applyFilters();
+  toast('Tag «'+tag+'» ajouté');
+}}
+
+function removeTag(photo,tag){{
+  photo.tags=photo.tags.filter(t=>t!==tag);
+  markDirty();
+  renderLbTags(photo);
+  refreshFilterBar();
+  applyFilters();
+  toast('Tag «'+tag+'» retiré');
+}}
+
+function setRating(photo,rating){{
+  photo.rating=(photo.rating===rating)?0:rating;
+  markDirty();
+  renderLbStars(photo.rating);
+  applyFilters();
+  toast(photo.rating?'Note : '+photo.rating+'/5':'Note supprimée');
+}}
 
 function showPhoto(idx){{
   if(filtered.length===0)return;
@@ -296,9 +431,27 @@ function showPhoto(idx){{
   const p=filtered[currentIdx];
   lbImg.src=p.src;
   lbName.textContent=p.name+' ('+p.year+')';
-  lbRating.textContent=p.rating?'★'.repeat(p.rating)+'☆'.repeat(5-p.rating):'';
-  lbTags.innerHTML=p.tags.map(t=>'<span>'+t+'</span>').join('');
+  renderLbStars(p.rating);
+  renderLbTags(p);
+  document.getElementById('lb-download').href=p.src;
 }}
+
+// Star click
+document.querySelectorAll('#lb-stars span').forEach(star=>{{
+  star.addEventListener('click',()=>{{
+    if(filtered.length===0)return;
+    setRating(filtered[currentIdx],parseInt(star.dataset.star));
+  }});
+  star.addEventListener('mouseenter',()=>{{
+    const v=parseInt(star.dataset.star);
+    document.querySelectorAll('#lb-stars span').forEach(s=>{{
+      s.classList.toggle('hover',parseInt(s.dataset.star)<=v);
+    }});
+  }});
+  star.addEventListener('mouseleave',()=>{{
+    document.querySelectorAll('#lb-stars span').forEach(s=>s.classList.remove('hover'));
+  }});
+}});
 
 function openLightbox(idx){{
   showPhoto(idx);
@@ -316,7 +469,6 @@ document.getElementById('lb-close').addEventListener('click',closeLightbox);
 document.getElementById('lb-prev').addEventListener('click',()=>{{showPhoto(currentIdx-1);resetSlideshowTimer();}});
 document.getElementById('lb-next').addEventListener('click',()=>{{showPhoto(currentIdx+1);resetSlideshowTimer();}});
 
-// Click on thumbnail
 document.querySelectorAll('.thumb').forEach(el=>{{
   el.addEventListener('click',()=>{{
     const src=el.querySelector('img').getAttribute('src');
@@ -325,12 +477,13 @@ document.querySelectorAll('.thumb').forEach(el=>{{
   }});
 }});
 
-// Keyboard
 document.addEventListener('keydown',e=>{{
   if(!lb.classList.contains('open'))return;
   if(e.key==='Escape')closeLightbox();
   if(e.key==='ArrowLeft'){{showPhoto(currentIdx-1);resetSlideshowTimer();}}
   if(e.key==='ArrowRight'){{showPhoto(currentIdx+1);resetSlideshowTimer();}}
+  if(e.key>='1'&&e.key<='5')setRating(filtered[currentIdx],parseInt(e.key));
+  if(e.key==='0')setRating(filtered[currentIdx],0);
 }});
 
 // Slideshow
@@ -346,14 +499,10 @@ function startSlideshow(random){{
 
 function runSlideshowTick(){{
   clearInterval(slideshowInterval);
-  lbBar.style.transition='none';
-  lbBar.style.width='0%';
-  requestAnimationFrame(()=>{{
-    requestAnimationFrame(()=>{{
-      lbBar.style.transition='width '+slideshowDelay+'ms linear';
-      lbBar.style.width='100%';
-    }});
-  }});
+  lbBar.style.transition='none';lbBar.style.width='0%';
+  requestAnimationFrame(()=>{{requestAnimationFrame(()=>{{
+    lbBar.style.transition='width '+slideshowDelay+'ms linear';lbBar.style.width='100%';
+  }})}});
   slideshowInterval=setTimeout(()=>{{
     if(slideshowRandom)showPhoto(Math.floor(Math.random()*filtered.length));
     else showPhoto(currentIdx+1);
@@ -361,13 +510,10 @@ function runSlideshowTick(){{
   }},slideshowDelay);
 }}
 
-function resetSlideshowTimer(){{
-  if(slideshowInterval)runSlideshowTick();
-}}
+function resetSlideshowTimer(){{if(slideshowInterval)runSlideshowTick();}}
 
 function stopSlideshow(){{
-  clearInterval(slideshowInterval);
-  slideshowInterval=null;
+  clearInterval(slideshowInterval);slideshowInterval=null;
   lbBar.style.width='0%';
   document.querySelector('.slideshow-controls').style.display='none';
   document.getElementById('ss-playpause').textContent='Pause';
@@ -399,7 +545,52 @@ document.getElementById('ss-speed-up').addEventListener('click',()=>{{
   if(slideshowInterval)runSlideshowTick();
 }});
 
-// Init: hide slideshow controls
+// Save metadata
+function saveMetadata(){{
+  const meta={{files:{{}}}};
+  ALL_PHOTOS.forEach(p=>{{
+    if(p.tags.length||p.rating){{
+      const entry={{}};
+      if(p.tags.length)entry.tags=p.tags;
+      if(p.rating)entry.rating=p.rating;
+      meta.files[p.src]=entry;
+    }}
+  }});
+  const json=JSON.stringify(meta,null,2);
+  const blob=new Blob([json],{{type:'application/json'}});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='.photo_sort_metadata.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  hasChanges=false;
+  document.getElementById('btn-save').classList.remove('has-changes');
+  toast('Metadata sauvegardé');
+}}
+
+document.getElementById('btn-save').addEventListener('click',saveMetadata);
+
+// Export filtered
+function exportFiltered(){{
+  if(filtered.length===0){{toast('Aucune photo à exporter');return;}}
+  const list=filtered.map(p=>p.src).join('\n');
+  const blob=new Blob([list],{{type:'text/plain'}});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='export_list.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(filtered.length+' fichiers dans export_list.txt');
+}}
+
+document.getElementById('btn-export').addEventListener('click',exportFiltered);
+
+// Warn on unsaved changes
+window.addEventListener('beforeunload',e=>{{
+  if(hasChanges){{e.preventDefault();e.returnValue='';}}
+}});
+
+// Init
 document.querySelector('.slideshow-controls').style.display='none';
 </script>
 </body>
@@ -656,6 +847,118 @@ mod tests {
     fn run_gallery_empty_dir_errors() {
         let tmp = tmpdir();
         assert!(run_gallery(&tmp).is_err());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Inline tag editing ---
+
+    #[test]
+    fn html_has_tag_input_in_lightbox() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("lb-tag-input"));
+        assert!(html.contains("lb-tag-add"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_removable_tag_badges() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        // The JS function to render tags with remove buttons
+        assert!(html.contains("removeTag"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Inline star rating ---
+
+    #[test]
+    fn html_has_clickable_star_rating() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("lb-stars"));
+        assert!(html.contains("setRating"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Save metadata ---
+
+    #[test]
+    fn html_has_save_metadata_button() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("btn-save"));
+        assert!(html.contains("saveMetadata"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Download / Export ---
+
+    #[test]
+    fn html_has_download_button_in_lightbox() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("lb-download"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_filter_tags_container_id() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let mut meta = Metadata::default();
+        meta.add_tag("2020/2020-01-01_00-00-00.jpg", "vacances");
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("id=\"filter-tags-container\""));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_thumb_stars_in_grid() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let mut meta = Metadata::default();
+        meta.set_rating("2020/2020-01-01_00-00-00.jpg", Some(3));
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("thumb-stars"));
+        assert!(html.contains("\u{2605}\u{2605}\u{2605}"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_export_filtered_button() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("btn-export"));
+        assert!(html.contains("exportFiltered"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
