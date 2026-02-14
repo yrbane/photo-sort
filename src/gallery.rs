@@ -174,8 +174,13 @@ main{{padding:1rem 2rem 4rem}}
 .lb-top-bar{{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:.8rem 1.5rem;z-index:1002}}
 .lb-close{{font-size:2rem;color:#888;cursor:pointer;transition:color .2s}}
 .lb-close:hover{{color:#fff}}
-.lb-download{{color:#888;cursor:pointer;font-size:.85rem;text-decoration:none;padding:.3rem .6rem;border:1px solid #444;border-radius:6px;transition:all .2s}}
-.lb-download:hover{{color:#fff;border-color:#888}}
+.lb-actions{{display:flex;gap:.4rem;align-items:center}}
+.lb-action{{color:#888;cursor:pointer;font-size:.85rem;text-decoration:none;padding:.3rem .6rem;border:1px solid #444;border-radius:6px;transition:all .2s;background:none}}
+.lb-action:hover{{color:#fff;border-color:#888}}
+.lb-delete-btn{{color:#f66!important;border-color:#633!important}}
+.lb-delete-btn:hover{{color:#fff!important;background:#a33!important;border-color:#a33!important}}
+.lb-move-btn{{color:#fc6!important;border-color:#653!important}}
+.lb-move-btn:hover{{color:#fff!important;background:#a73!important;border-color:#a73!important}}
 .lb-nav{{position:absolute;top:50%;transform:translateY(-50%);font-size:3rem;color:#555;cursor:pointer;user-select:none;padding:1rem;transition:color .2s;z-index:1001}}
 .lb-nav:hover{{color:#fff}}
 .lb-prev{{left:1rem}}
@@ -245,7 +250,13 @@ main{{padding:1rem 2rem 4rem}}
 
 <div class="lightbox" id="lightbox">
   <div class="lb-top-bar">
-    <a class="lb-download" id="lb-download" download>Télécharger</a>
+    <div class="lb-actions">
+      <a class="lb-action" id="lb-download" download>&#x2B07; Télécharger</a>
+      <button class="lb-action lb-rotate" id="lb-rotate-left" title="Rotation gauche">&#x21BA;</button>
+      <button class="lb-action lb-rotate" id="lb-rotate-right" title="Rotation droite">&#x21BB;</button>
+      <button class="lb-action lb-move-btn" id="lb-move" title="Déplacer">&#x1F4C1; Déplacer</button>
+      <button class="lb-action lb-delete-btn" id="lb-delete" title="Supprimer">&#x1F5D1; Supprimer</button>
+    </div>
     <span class="lb-close" id="lb-close">&times;</span>
   </div>
   <span class="lb-nav lb-prev" id="lb-prev">&#8249;</span>
@@ -570,6 +581,8 @@ document.getElementById('ss-speed-up').addEventListener('click',()=>{{
   if(slideshowInterval)runSlideshowTick();
 }});
 
+const isServed=window.location.protocol.startsWith('http');
+
 // Save metadata
 function saveMetadata(){{
   const meta={{files:{{}}}};
@@ -582,18 +595,106 @@ function saveMetadata(){{
     }}
   }});
   const json=JSON.stringify(meta,null,2);
-  const blob=new Blob([json],{{type:'application/json'}});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='.photo_sort_metadata.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  hasChanges=false;
-  document.getElementById('btn-save').classList.remove('has-changes');
-  toast('Metadata sauvegardé');
+  if(isServed){{
+    fetch('/api/metadata',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:json}})
+      .then(r=>r.json())
+      .then(d=>{{
+        if(d.ok){{hasChanges=false;document.getElementById('btn-save').classList.remove('has-changes');toast('Metadata sauvegardé');}}
+        else toast('Erreur: '+(d.error||'inconnue'));
+      }}).catch(e=>toast('Erreur réseau: '+e));
+  }}else{{
+    const blob=new Blob([json],{{type:'application/json'}});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='.photo_sort_metadata.json';a.click();URL.revokeObjectURL(a.href);
+    hasChanges=false;document.getElementById('btn-save').classList.remove('has-changes');
+    toast('Metadata sauvegardé (téléchargé)');
+  }}
 }}
 
 document.getElementById('btn-save').addEventListener('click',saveMetadata);
+
+// Delete photo
+function deletePhoto(){{
+  if(filtered.length===0)return;
+  const p=filtered[currentIdx];
+  if(!confirm('Supprimer définitivement '+p.name+' ?'))return;
+  if(isServed){{
+    fetch('/api/photo?path='+encodeURIComponent(p.src),{{method:'DELETE'}})
+      .then(r=>r.json())
+      .then(d=>{{
+        if(d.ok){{
+          const gi=ALL_PHOTOS.indexOf(p);
+          if(gi>=0)ALL_PHOTOS.splice(gi,1);
+          filtered=filtered.filter(x=>x!==p);
+          // Remove from grid
+          document.querySelectorAll('.thumb').forEach(el=>{{
+            if(el.querySelector('img').getAttribute('src')===p.src)el.remove();
+          }});
+          applyFilters();refreshFilterBar();
+          if(filtered.length===0)closeLightbox();
+          else showPhoto(Math.min(currentIdx,filtered.length-1));
+          toast(p.name+' supprimé');
+        }}else toast('Erreur: '+(d.error||'inconnue'));
+      }}).catch(e=>toast('Erreur réseau: '+e));
+  }}else{{
+    toast('Suppression disponible uniquement via photo-sort serve');
+  }}
+}}
+
+document.getElementById('lb-delete').addEventListener('click',deletePhoto);
+
+// Move photo
+function movePhoto(){{
+  if(filtered.length===0)return;
+  const p=filtered[currentIdx];
+  const dest=prompt('Déplacer '+p.name+' vers quel dossier (ex: 2021) ?',p.year);
+  if(!dest||dest===p.year)return;
+  if(isServed){{
+    fetch('/api/move',{{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{src:p.src,dest_dir:dest}})}})
+      .then(r=>r.json())
+      .then(d=>{{
+        if(d.ok){{
+          const oldSrc=p.src;
+          p.src=d.new_path;p.year=dest;p.name=p.src.split('/').pop();
+          // Update grid image
+          document.querySelectorAll('.thumb img').forEach(img=>{{
+            if(img.getAttribute('src')===oldSrc)img.src=p.src;
+          }});
+          markDirty();applyFilters();refreshFilterBar();
+          showPhoto(currentIdx);
+          toast(p.name+' déplacé vers '+dest);
+        }}else toast('Erreur: '+(d.error||'inconnue'));
+      }}).catch(e=>toast('Erreur réseau: '+e));
+  }}else{{
+    toast('Déplacement disponible uniquement via photo-sort serve');
+  }}
+}}
+
+document.getElementById('lb-move').addEventListener('click',movePhoto);
+
+// Rotate photo
+function rotatePhoto(angle){{
+  if(filtered.length===0)return;
+  const p=filtered[currentIdx];
+  if(isServed){{
+    fetch('/api/rotate',{{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{path:p.src,angle:angle}})}})
+      .then(r=>r.json())
+      .then(d=>{{
+        if(d.ok){{
+          // Force reload image by appending cache-buster
+          lbImg.src=p.src+'?t='+Date.now();
+          toast('Photo tournée de '+angle+'°');
+        }}else toast('Erreur: '+(d.error||'inconnue'));
+      }}).catch(e=>toast('Erreur réseau: '+e));
+  }}else{{
+    toast('Rotation disponible uniquement via photo-sort serve');
+  }}
+}}
+
+document.getElementById('lb-rotate-left').addEventListener('click',()=>rotatePhoto(270));
+document.getElementById('lb-rotate-right').addEventListener('click',()=>rotatePhoto(90));
 
 // Export filtered
 function exportFiltered(){{
@@ -1018,6 +1119,62 @@ mod tests {
         // Tag suggestions container and function
         assert!(html.contains("tag-suggestions"));
         assert!(html.contains("renderTagSuggestions"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Delete, Move, Rotate buttons ---
+
+    #[test]
+    fn html_has_delete_button_with_confirmation() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("lb-delete"));
+        assert!(html.contains("deletePhoto"));
+        assert!(html.contains("confirm"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_move_button() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("lb-move"));
+        assert!(html.contains("movePhoto"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_rotate_buttons() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("lb-rotate-left"));
+        assert!(html.contains("lb-rotate-right"));
+        assert!(html.contains("rotatePhoto"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn html_has_api_save_metadata() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        // In serve mode, save uses fetch to /api/metadata
+        assert!(html.contains("/api/metadata"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
