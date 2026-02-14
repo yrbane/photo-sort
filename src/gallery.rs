@@ -265,7 +265,9 @@ main{{padding:1rem 2rem 4rem}}
   </div>
   <div class="lb-slideshow-bar" id="lb-bar" style="width:0%"></div>
   <div class="slideshow-controls">
+    <button id="ss-prev">&#9664; Préc</button>
     <button id="ss-playpause">Pause</button>
+    <button id="ss-next">Suiv &#9654;</button>
     <button id="ss-random-toggle">Aléatoire</button>
     <button id="ss-speed-down">-</button>
     <span id="ss-speed" style="color:#ccc;font-size:.85rem">5s</span>
@@ -547,6 +549,9 @@ document.getElementById('ss-playpause').addEventListener('click',()=>{{
   if(slideshowInterval){{clearInterval(slideshowInterval);slideshowInterval=null;lbBar.style.transition='none';btn.textContent='Reprendre';}}
   else{{btn.textContent='Pause';runSlideshowTick();}}
 }});
+
+document.getElementById('ss-prev').addEventListener('click',()=>{{showPhoto(currentIdx-1);resetSlideshowTimer();}});
+document.getElementById('ss-next').addEventListener('click',()=>{{showPhoto(currentIdx+1);resetSlideshowTimer();}});
 
 document.getElementById('ss-random-toggle').addEventListener('click',()=>{{
   slideshowRandom=!slideshowRandom;
@@ -979,6 +984,21 @@ mod tests {
 
         assert!(html.contains("btn-export"));
         assert!(html.contains("exportFiltered"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Slideshow controls ---
+
+    #[test]
+    fn html_has_slideshow_prev_next_buttons() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let meta = Metadata::default();
+        let html = generate_html(&photos, &meta);
+
+        assert!(html.contains("ss-prev"));
+        assert!(html.contains("ss-next"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
