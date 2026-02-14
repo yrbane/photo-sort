@@ -1,311 +1,1031 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>photo-sort — Documentation</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>photo-sort &mdash; Triez et explorez vos photos en Rust</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0b0e14;--surface:#131820;--border:#1e2530;--text:#c8cdd5;--muted:#6b7280;--accent:#4fc3f7;--accent2:#81d4fa;--green:#66bb6a;--orange:#ffa726;--red:#ef5350;--purple:#ab47bc;--yellow:#ffd54f;--radius:10px}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;line-height:1.7;overflow-x:hidden}
-::selection{background:var(--accent);color:#000}
+  /* ═══════════════════════════════════════════════════════════════════════════
+     RESET & BASE
+     ═══════════════════════════════════════════════════════════════════════════ */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* Header */
-.hero{position:relative;padding:5rem 2rem 4rem;text-align:center;overflow:hidden}
-.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(79,195,247,.12) 0%,transparent 70%);pointer-events:none}
-.hero h1{font-size:3.5rem;font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,var(--accent),var(--accent2),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.5rem}
-.hero .tagline{font-size:1.2rem;color:var(--muted);max-width:600px;margin:0 auto 2rem}
-.badges{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;margin-bottom:2rem}
-.badge{display:inline-flex;align-items:center;gap:.35rem;background:var(--surface);border:1px solid var(--border);padding:.35rem .8rem;border-radius:20px;font-size:.8rem;color:var(--muted)}
-.badge .dot{width:8px;height:8px;border-radius:50%}
-.badge .dot.rust{background:#dea584}.badge .dot.exif{background:var(--accent)}.badge .dot.formats{background:var(--green)}.badge .dot.tests{background:var(--purple)}
+  :root {
+    --bg:        #0a0a0f;
+    --bg-card:   #12121a;
+    --bg-code:   #1a1a2e;
+    --border:    #1e1e30;
+    --text:      #c8c8d8;
+    --text-dim:  #6a6a80;
+    --accent:    #4fc3f7;
+    --accent2:   #00d4aa;
+    --accent3:   #ff6b6b;
+    --accent4:   #ffd93d;
+    --glow:      rgba(79, 195, 247, .15);
+    --glow2:     rgba(0, 212, 170, .12);
+    --radius:    12px;
+    --radius-sm: 8px;
+    --font:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
 
-/* Layout */
-.container{max-width:960px;margin:0 auto;padding:0 2rem 4rem}
-section{margin-bottom:3.5rem}
-h2{font-size:1.6rem;font-weight:700;color:#e8ecf0;margin-bottom:1.2rem;display:flex;align-items:center;gap:.5rem}
-h2 .icon{font-size:1.3rem}
-h3{font-size:1.1rem;font-weight:600;color:var(--accent);margin:1.5rem 0 .6rem}
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-/* Cards */
-.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.3rem;transition:border-color .2s,transform .2s}
-.card:hover{border-color:var(--accent);transform:translateY(-2px)}
-.card .card-icon{font-size:1.8rem;margin-bottom:.5rem}
-.card h3{margin:0 0 .4rem;color:#e8ecf0;font-size:1rem}
-.card p{color:var(--muted);font-size:.88rem;line-height:1.5}
+  html { scroll-behavior: smooth; }
 
-/* Tree */
-.tree{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem 2rem;font-family:"SF Mono",Menlo,Monaco,Consolas,monospace;font-size:.85rem;line-height:1.9;overflow-x:auto}
-.tree .dir{color:var(--accent)}
-.tree .file{color:var(--muted)}
-.tree .arrow{color:var(--green);font-weight:700}
-.tree .highlight{color:var(--yellow)}
-.tree .cmd{color:var(--orange)}
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
 
-/* Code */
-pre{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.2rem 1.5rem;overflow-x:auto;font-size:.85rem;line-height:1.7;margin:.8rem 0}
-code{font-family:"SF Mono",Menlo,Monaco,Consolas,monospace;font-size:.85em}
-pre code{color:var(--text)}
-.cmd-prefix{color:var(--green);user-select:none}
-.comment{color:var(--muted);font-style:italic}
+  ::selection { background: var(--accent); color: #000; }
 
-/* Table */
-table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.88rem}
-th{text-align:left;padding:.6rem .8rem;background:var(--surface);color:var(--accent);border-bottom:2px solid var(--border);font-weight:600}
-td{padding:.5rem .8rem;border-bottom:1px solid var(--border);color:var(--text)}
-td:first-child{white-space:nowrap;color:var(--accent2);font-weight:500}
+  /* ═══════════════════════════════════════════════════════════════════════════
+     AMBIENT BACKGROUND
+     ═══════════════════════════════════════════════════════════════════════════ */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 20%, rgba(79,195,247,.06), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,212,170,.04), transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-/* Priority badges */
-.prio{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:.75rem;font-weight:700;color:#000}
-.prio-1{background:var(--green)}.prio-2{background:var(--orange)}.prio-3{background:var(--red)}
+  .grain {
+    position: fixed; inset: 0; pointer-events: none; z-index: 9999; opacity: .025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 256px;
+  }
 
-/* Feature list */
-.features{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .8rem}
-.features li{padding:.25rem 0;font-size:.9rem;display:flex;align-items:baseline;gap:.4rem}
-.features li::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:.55rem}
+  /* ═══════════════════════════════════════════════════════════════════════════
+     LAYOUT
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .container {
+    position: relative; z-index: 1;
+    max-width: 1120px; margin: 0 auto;
+    padding: 0 24px;
+  }
 
-/* API table */
-.api-method{display:inline-block;padding:.15rem .5rem;border-radius:4px;font-size:.75rem;font-weight:700;font-family:monospace;min-width:55px;text-align:center}
-.api-get{background:#1b3a2a;color:var(--green)}
-.api-post{background:#2a2a1a;color:var(--orange)}
-.api-delete{background:#2a1a1a;color:var(--red)}
+  section { padding: 80px 0; }
 
-/* Footer */
-footer{text-align:center;padding:2rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--border)}
-footer a{color:var(--accent);text-decoration:none}
-footer a:hover{text-decoration:underline}
+  /* ═══════════════════════════════════════════════════════════════════════════
+     NAV
+     ═══════════════════════════════════════════════════════════════════════════ */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    background: rgba(10,10,15,.7);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .container {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 14px; padding-bottom: 14px;
+  }
+  nav .logo {
+    font-family: var(--mono); font-weight: 700; font-size: 1.15rem;
+    color: #fff; text-decoration: none; letter-spacing: -.02em;
+  }
+  nav .logo span { color: var(--accent); }
+  nav ul { list-style: none; display: flex; gap: 28px; }
+  nav a {
+    color: var(--text-dim); text-decoration: none; font-size: .88rem;
+    font-weight: 500; transition: color .2s;
+  }
+  nav a:hover { color: #fff; }
 
-/* Responsive */
-@media(max-width:640px){
-  .hero h1{font-size:2.2rem}
-  .hero .tagline{font-size:1rem}
-  .features{grid-template-columns:1fr}
-  .card-grid{grid-template-columns:1fr}
-  .container{padding:0 1rem 3rem}
-}
+  /* ═══════════════════════════════════════════════════════════════════════════
+     HERO
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .hero {
+    padding: 120px 0 80px;
+    text-align: center;
+    position: relative;
+  }
+  .hero::after {
+    content: '';
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 60%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--glow);
+    border: 1px solid rgba(79,195,247,.2);
+    border-radius: 999px;
+    padding: 6px 18px;
+    font-size: .8rem; font-weight: 500;
+    color: var(--accent);
+    margin-bottom: 28px;
+  }
+  .hero-badge .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 8px var(--accent2);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: .4; transform: scale(.7); }
+  }
+
+  .hero h1 {
+    font-size: clamp(2.8rem, 6vw, 4.8rem);
+    font-weight: 900;
+    letter-spacing: -.04em;
+    line-height: 1.08;
+    margin-bottom: 20px;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero .sub {
+    font-size: 1.15rem;
+    color: var(--text-dim);
+    max-width: 620px;
+    margin: 0 auto 36px;
+    font-weight: 400;
+  }
+
+  .hero-stats {
+    display: flex; justify-content: center; gap: 40px;
+    flex-wrap: wrap;
+  }
+  .hero-stat { text-align: center; }
+  .hero-stat .num {
+    font-size: 1.6rem; font-weight: 800; color: #fff;
+    font-family: var(--mono);
+  }
+  .hero-stat .label {
+    font-size: .78rem; color: var(--text-dim); font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .install-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px; margin: 36px auto 0;
+    max-width: 520px;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 20px;
+    font-family: var(--mono);
+    font-size: .92rem;
+    color: var(--text);
+    position: relative;
+    overflow: hidden;
+  }
+  .install-bar::before {
+    content: '$';
+    color: var(--accent2);
+    font-weight: 700;
+  }
+  .install-bar code { color: #fff; font-weight: 500; }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     SECTION TITLES
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .section-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono);
+    font-size: .78rem; font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    margin-bottom: 12px;
+  }
+  .section-tag::before {
+    content: '';
+    width: 18px; height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+
+  .section-title {
+    font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -.03em;
+    color: #fff;
+    margin-bottom: 16px;
+  }
+  .section-desc {
+    color: var(--text-dim);
+    max-width: 600px;
+    font-size: 1rem;
+    margin-bottom: 48px;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     FEATURES GRID
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  .feature-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    transition: border-color .3s, transform .3s, box-shadow .3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .feature-card:hover {
+    border-color: rgba(79,195,247,.3);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(0,0,0,.3), 0 0 0 1px rgba(79,195,247,.1);
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  .feature-card:hover::before { opacity: 1; }
+
+  .feature-icon {
+    width: 42px; height: 42px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    font-size: 1.3rem;
+    margin-bottom: 16px;
+  }
+  .fi-blue   { background: rgba(79,195,247,.12);  color: var(--accent); }
+  .fi-green  { background: rgba(0,212,170,.12);   color: var(--accent2); }
+  .fi-red    { background: rgba(255,107,107,.12);  color: var(--accent3); }
+  .fi-yellow { background: rgba(255,217,61,.12);   color: var(--accent4); }
+
+  .feature-card h3 {
+    font-size: 1rem; font-weight: 700; color: #fff;
+    margin-bottom: 8px;
+  }
+  .feature-card p {
+    font-size: .88rem; color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .feature-card p code {
+    font-size: .8rem;
+    background: rgba(79,195,247,.08);
+    padding: .1rem .4rem;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     PIPELINE (Date Detection)
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .pipeline {
+    display: flex; gap: 0; align-items: stretch;
+    overflow-x: auto;
+    padding: 8px 0 20px;
+  }
+  .pipe-stage {
+    flex: 1; min-width: 180px;
+    position: relative;
+    text-align: center;
+    padding: 24px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    transition: border-color .3s;
+  }
+  .pipe-stage:hover { border-color: rgba(79,195,247,.3); }
+  .pipe-stage:first-child  { border-radius: var(--radius) 0 0 var(--radius); }
+  .pipe-stage:last-child   { border-radius: 0 var(--radius) var(--radius) 0; }
+  .pipe-stage:not(:last-child)::after {
+    content: '';
+    position: absolute; right: -10px; top: 50%; transform: translateY(-50%);
+    width: 0; height: 0;
+    border: 10px solid transparent;
+    border-left-color: var(--accent);
+    z-index: 2;
+    filter: drop-shadow(0 0 4px rgba(79,195,247,.4));
+  }
+  .pipe-stage:not(:first-child) { border-left: none; }
+  .pipe-stage .stage-num {
+    font-family: var(--mono); font-size: .7rem; font-weight: 700;
+    color: var(--accent); letter-spacing: .1em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .pipe-stage .stage-title {
+    font-size: .92rem; font-weight: 700; color: #fff;
+    margin-bottom: 6px;
+  }
+  .pipe-stage .stage-desc {
+    font-size: .76rem; color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     CODE BLOCK
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .code-block {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    font-family: var(--mono);
+    font-size: .85rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    position: relative;
+  }
+  .code-block .code-header {
+    font-size: .72rem; font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .code-block .code-header::before {
+    content: '';
+    display: flex;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 6px var(--accent2);
+  }
+  .code-block .line {
+    display: flex;
+    white-space: pre;
+  }
+  .code-block .ln {
+    color: var(--text-dim);
+    min-width: 2.5em;
+    text-align: right;
+    padding-right: 1.2em;
+    user-select: none;
+    opacity: .5;
+  }
+  .cm { color: #5c6370; font-style: italic; }
+  .fn { color: #61afef; }
+  .op { color: #56b6c2; }
+  .str { color: #98c379; }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     GALLERY FEATURES LIST
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .gallery-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    display: flex; align-items: center; gap: 12px;
+    transition: border-color .3s;
+  }
+  .gallery-item:hover { border-color: rgba(79,195,247,.3); }
+  .gallery-item .gi-icon {
+    font-size: 1.2rem; flex-shrink: 0;
+  }
+  .gallery-item .gi-text {
+    font-size: .85rem; font-weight: 500; color: #fff;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     API TABLE
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .api-table-wrap { overflow-x: auto; }
+  .api-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: .85rem;
+  }
+  .api-table thead th {
+    text-align: left;
+    font-size: .72rem; font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .api-table tbody td {
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(30,30,48,.5);
+    vertical-align: top;
+  }
+  .api-table tbody tr:hover td {
+    background: rgba(79,195,247,.03);
+  }
+  .api-method {
+    display: inline-block; padding: .15rem .5rem;
+    border-radius: 4px; font-size: .72rem; font-weight: 700;
+    font-family: var(--mono); min-width: 50px; text-align: center;
+  }
+  .m-get    { background: rgba(0,212,170,.12); color: var(--accent2); }
+  .m-post   { background: rgba(255,217,61,.12); color: var(--accent4); }
+  .m-delete { background: rgba(255,107,107,.12); color: var(--accent3); }
+  .api-path {
+    font-family: var(--mono); font-weight: 600; color: var(--accent);
+  }
+  .api-desc { color: var(--text-dim); }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     FORMATS BADGES
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .format-badges {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .format-badge {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: .82rem; font-weight: 600;
+    color: #fff;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .format-badge:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px var(--glow);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     TEST SUITES
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .test-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .test-suite {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    transition: border-color .3s;
+  }
+  .test-suite:hover { border-color: rgba(0,212,170,.3); }
+  .test-suite .ts-name {
+    font-family: var(--mono);
+    font-size: .82rem; font-weight: 600; color: #fff;
+  }
+  .test-suite .ts-count {
+    font-family: var(--mono);
+    font-size: .82rem; font-weight: 700;
+    color: var(--accent2);
+    background: rgba(0,212,170,.1);
+    border-radius: 6px;
+    padding: 3px 10px;
+  }
+
+  .test-total {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px;
+    margin-top: 24px;
+    padding: 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(0,212,170,.2);
+    background: rgba(0,212,170,.04);
+  }
+  .test-total .check-icon {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent2);
+    border-radius: 50%;
+    color: #000;
+    font-weight: 900;
+    font-size: .9rem;
+  }
+  .test-total span {
+    font-family: var(--mono);
+    font-size: 1rem; font-weight: 700; color: #fff;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     FILES TABLE
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+  }
+  .file-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 18px 22px;
+    transition: border-color .3s;
+  }
+  .file-card:hover { border-color: rgba(79,195,247,.3); }
+  .file-card .fc-name {
+    font-family: var(--mono);
+    font-size: .85rem; font-weight: 600; color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .file-card .fc-desc {
+    font-size: .82rem; color: var(--text-dim); line-height: 1.5;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════════════════════════════════════ */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 0;
+    text-align: center;
+    font-size: .82rem;
+    color: var(--text-dim);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer .heart { color: var(--accent3); }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     RESPONSIVE
+     ═══════════════════════════════════════════════════════════════════════════ */
+  @media (max-width: 768px) {
+    nav ul { gap: 16px; }
+    .hero-stats { gap: 24px; }
+    .pipeline { flex-direction: column; }
+    .pipe-stage:first-child  { border-radius: var(--radius) var(--radius) 0 0; }
+    .pipe-stage:last-child   { border-radius: 0 0 var(--radius) var(--radius); }
+    .pipe-stage:not(:last-child)::after { display: none; }
+    .pipe-stage:not(:first-child) { border-left: 1px solid var(--border); border-top: none; }
+    .gallery-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     ANIMATIONS
+     ═══════════════════════════════════════════════════════════════════════════ */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-in {
+    opacity: 0;
+    animation: fadeUp .6s ease-out forwards;
+  }
+  .delay-1 { animation-delay: .1s; }
+  .delay-2 { animation-delay: .2s; }
+  .delay-3 { animation-delay: .3s; }
+  .delay-4 { animation-delay: .4s; }
 </style>
 </head>
 <body>
+<div class="grain"></div>
 
-<div class="hero">
-  <h1>photo-sort</h1>
-  <p class="tagline">Outil CLI en Rust qui trie, organise et explore vos photos avec une galerie web interactive.</p>
-  <div class="badges">
-    <span class="badge"><span class="dot rust"></span> Rust</span>
-    <span class="badge"><span class="dot exif"></span> EXIF</span>
-    <span class="badge"><span class="dot formats"></span> 14 formats</span>
-    <span class="badge"><span class="dot tests"></span> 130 tests</span>
+<!-- ═════════════════════════════════════════════════════════════════════════
+     NAV
+     ═════════════════════════════════════════════════════════════════════════ -->
+<nav>
+  <div class="container">
+    <a href="#" class="logo"><span>$</span> photo-sort</a>
+    <ul>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#gallery">Galerie</a></li>
+      <li><a href="#api">API</a></li>
+      <li><a href="#usage">Usage</a></li>
+      <li><a href="#tests">Tests</a></li>
+    </ul>
   </div>
-</div>
+</nav>
 
-<div class="container">
+<!-- ═════════════════════════════════════════════════════════════════════════
+     HERO
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge animate-in">
+      <span class="dot"></span>
+      Rust &mdash; EXIF &mdash; 14 formats
+    </div>
 
-<!-- Principe -->
-<section>
-<h2><span class="icon">&#128247;</span> Principe</h2>
-<div class="tree">
-<span class="dir">photos/</span><br>
-&nbsp;&nbsp;<span class="dir">vacances 2008/</span>DCIM/<span class="file">IMG_0001.jpg</span><br>
-&nbsp;&nbsp;<span class="dir">noel/</span><span class="file">DSC_4521.CR2</span><br>
-&nbsp;&nbsp;<span class="dir">vrac/</span><span class="file">photo_random.heic</span><br>
-<br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="cmd">photo-sort sort photos/</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span><br>
-<br>
-<span class="dir">photos_sorted/</span><br>
-&nbsp;&nbsp;<span class="dir">2008/</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">2008-07-15_14-30-22.jpg</span><br>
-&nbsp;&nbsp;<span class="dir">2019/</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">2019-12-25_18-45-01.cr2</span><br>
-&nbsp;&nbsp;<span class="dir">2024/</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">2024-03-10_09-12-44.heic</span><br>
-&nbsp;&nbsp;<span class="file">.photo_sort_metadata.json</span>
-</div>
-</section>
+    <h1 class="animate-in delay-1">
+      Triez vos <span class="grad">photos</span><br>
+      en un instant
+    </h1>
 
-<!-- Fonctionnalites -->
-<section>
-<h2><span class="icon">&#9889;</span> Fonctionnalites</h2>
-<div class="card-grid">
-  <div class="card">
-    <div class="card-icon">&#128269;</div>
-    <h3>Detection de date intelligente</h3>
-    <p>EXIF, nom de dossier (regex 19xx/20xx), puis date systeme en dernier recours.</p>
+    <p class="sub animate-in delay-2">
+      Tri automatique par date EXIF, deduplication BLAKE3,
+      galerie web interactive avec lightbox, tags, notes,
+      metadonnees EXIF et mode serveur.
+    </p>
+
+    <div class="hero-stats animate-in delay-3">
+      <div class="hero-stat">
+        <div class="num">14</div>
+        <div class="label">Formats photo</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num">6</div>
+        <div class="label">Commandes</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num">7</div>
+        <div class="label">Endpoints API</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num">130</div>
+        <div class="label">Tests</div>
+      </div>
+    </div>
+
+    <div class="install-bar animate-in delay-4">
+      <code>cargo build --release</code>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-icon">&#128279;</div>
-    <h3>Deduplication BLAKE3</h3>
-    <p>Hash rapide de chaque photo avant copie. Les doublons sont ignores automatiquement.</p>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════
+     FEATURES
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="features">
+  <div class="container">
+    <div class="section-tag">Features</div>
+    <h2 class="section-title">Tout ce qu'il faut.</h2>
+    <p class="section-desc">
+      Du tri EXIF a la galerie interactive en passant par l'export filtre
+      &mdash; tout en un seul binaire.
+    </p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <h3>Detection de date intelligente</h3>
+        <p>EXIF (<code>DateTimeOriginal</code>), nom de dossier (regex 19xx/20xx), puis date filesystem en dernier recours.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-green">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        </div>
+        <h3>Deduplication BLAKE3</h3>
+        <p>Hash cryptographique ultra-rapide de chaque photo avant copie. Les doublons sont ignores automatiquement.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-yellow">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Reprise apres interruption</h3>
+        <p>Progression JSON sauvegardee apres chaque copie. <code>Ctrl+C</code> gere proprement, reprise exacte au relancement.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </div>
+        <h3>Galerie web interactive</h3>
+        <p>Lightbox avec chargement progressif, diaporama, tags, notes, filtres, miniatures. Statique ou mode serveur.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-red">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        </div>
+        <h3>Mode serveur HTTP</h3>
+        <p>Suppression, deplacement, rotation, metadonnees EXIF, sauvegarde directe via API REST. Cache HTML et miniatures.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-green">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <h3>Export filtre</h3>
+        <p>Copier les photos correspondant a un tag et/ou une note minimale vers un dossier de destination.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-yellow">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </div>
+        <h3>Tags et notes</h3>
+        <p>Systeme de tags libres et notes 1-5 par fichier. Edition inline dans la lightbox, suggestions en un clic, persistance JSON.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </div>
+        <h3>Metadonnees EXIF</h3>
+        <p>Consultation des metadonnees EXIF depuis la lightbox : appareil, objectif, ISO, ouverture, vitesse, dimensions, taille fichier.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon fi-red">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <h3>Chargement progressif</h3>
+        <p>La lightbox affiche instantanement la miniature (floue) puis bascule sur la haute resolution une fois chargee.</p>
+      </div>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-icon">&#9654;</div>
-    <h3>Reprise apres interruption</h3>
-    <p>Progression JSON sauvegardee apres chaque copie, Ctrl+C gere proprement.</p>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════
+     DATE DETECTION PIPELINE
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="detection">
+  <div class="container">
+    <div class="section-tag">Architecture</div>
+    <h2 class="section-title">Detection de date</h2>
+    <p class="section-desc">
+      Cascade de trois methodes &mdash; la premiere qui reussit gagne.
+    </p>
+
+    <div class="pipeline">
+      <div class="pipe-stage">
+        <div class="stage-num">Priorite 1</div>
+        <div class="stage-title">EXIF</div>
+        <div class="stage-desc"><code>DateTimeOriginal</code><br><code>DateTimeDigitized</code><br><code>DateTime</code></div>
+      </div>
+      <div class="pipe-stage">
+        <div class="stage-num">Priorite 2</div>
+        <div class="stage-title">Dossier</div>
+        <div class="stage-desc">Regex <code>(19|20)\d{2}</code><br>dans le chemin du fichier</div>
+      </div>
+      <div class="pipe-stage">
+        <div class="stage-num">Priorite 3</div>
+        <div class="stage-title">Systeme</div>
+        <div class="stage-desc">Date de creation ou<br>modification du fichier</div>
+      </div>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-icon">&#127912;</div>
-    <h3>Galerie web interactive</h3>
-    <p>Lightbox, diaporama, tags, notes, filtres, miniatures. Fonctionne en statique ou en mode serveur.</p>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════
+     GALLERY FEATURES
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="gallery">
+  <div class="container">
+    <div class="section-tag">Galerie</div>
+    <h2 class="section-title">Galerie web</h2>
+    <p class="section-desc">
+      Interface complete pour explorer, trier et annoter vos photos.
+      Fonctionne en HTML statique ou en mode serveur.
+    </p>
+
+    <div class="gallery-grid">
+      <div class="gallery-item"><span class="gi-icon">&#128444;</span><span class="gi-text">Grille responsive par annee</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#128269;</span><span class="gi-text">Lightbox plein ecran</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#9654;</span><span class="gi-text">Diaporama (1-15 s)</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#127922;</span><span class="gi-text">Mode aleatoire</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#9889;</span><span class="gi-text">Chargement progressif</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#127991;</span><span class="gi-text">Tags editables inline</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#11088;</span><span class="gi-text">Notes 1-5 cliquables</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#128270;</span><span class="gi-text">Filtres tag + note min</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#8505;</span><span class="gi-text">Modale EXIF</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#128260;</span><span class="gi-text">Rotation 90/180/270</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#128193;</span><span class="gi-text">Deplacement entre dossiers</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#128465;</span><span class="gi-text">Suppression avec confirmation</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#11015;</span><span class="gi-text">Telechargement individuel</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#128190;</span><span class="gi-text">Sauvegarde metadata</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#128228;</span><span class="gi-text">Export liste filtree</span></div>
+      <div class="gallery-item"><span class="gi-icon">&#9000;</span><span class="gi-text">Navigation clavier</span></div>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-icon">&#128736;</div>
-    <h3>Mode serveur</h3>
-    <p>Suppression, deplacement, rotation, metadonnees EXIF, sauvegarde directe via API REST.</p>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════
+     API
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="api">
+  <div class="container">
+    <div class="section-tag">Serveur</div>
+    <h2 class="section-title">API REST</h2>
+    <p class="section-desc">
+      Le mode <code>serve</code> expose une API REST complete pour manipuler les photos.
+    </p>
+
+    <div class="api-table-wrap">
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>Methode</th>
+            <th>Endpoint</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="api-method m-get">GET</span></td>
+            <td class="api-path">/</td>
+            <td class="api-desc">Galerie HTML (servie depuis le cache)</td>
+          </tr>
+          <tr>
+            <td><span class="api-method m-get">GET</span></td>
+            <td class="api-path">/thumb/{path}</td>
+            <td class="api-desc">Miniature JPEG d'une photo</td>
+          </tr>
+          <tr>
+            <td><span class="api-method m-get">GET</span></td>
+            <td class="api-path">/api/exif?path=...</td>
+            <td class="api-desc">Metadonnees EXIF + taille + dimensions</td>
+          </tr>
+          <tr>
+            <td><span class="api-method m-post">POST</span></td>
+            <td class="api-path">/api/metadata</td>
+            <td class="api-desc">Sauvegarder tags et notes</td>
+          </tr>
+          <tr>
+            <td><span class="api-method m-post">POST</span></td>
+            <td class="api-path">/api/move</td>
+            <td class="api-desc">Deplacer une photo vers un autre dossier</td>
+          </tr>
+          <tr>
+            <td><span class="api-method m-post">POST</span></td>
+            <td class="api-path">/api/rotate</td>
+            <td class="api-desc">Rotation d'une image (90, 180, 270)</td>
+          </tr>
+          <tr>
+            <td><span class="api-method m-delete">DEL</span></td>
+            <td class="api-path">/api/photo?path=...</td>
+            <td class="api-desc">Supprimer une photo</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-icon">&#128230;</div>
-    <h3>Export filtre</h3>
-    <p>Copier les photos correspondant a un tag et/ou une note minimale vers un dossier cible.</p>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════════
+     USAGE
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="usage">
+  <div class="container">
+    <div class="section-tag">Usage</div>
+    <h2 class="section-title">Commandes</h2>
+    <p class="section-desc">
+      6 sous-commandes pour trier, taguer, noter, afficher, servir et exporter.
+    </p>
+
+    <div class="code-block" style="margin-bottom: 36px;">
+      <div class="code-header">Terminal</div>
+      <div class="line"><span class="ln"> 1</span><span class="cm"># Trier les photos par annee</span></div>
+      <div class="line"><span class="ln"> 2</span><span class="fn">photo-sort</span> sort /chemin/vers/photos</div>
+      <div class="line"><span class="ln"> 3</span><span class="fn">photo-sort</span> sort /photos <span class="op">-o</span> /photos/triees</div>
+      <div class="line"><span class="ln"> 4</span></div>
+      <div class="line"><span class="ln"> 5</span><span class="cm"># Tags et notes</span></div>
+      <div class="line"><span class="ln"> 6</span><span class="fn">photo-sort</span> tag /triees 2008/photo.jpg vacances</div>
+      <div class="line"><span class="ln"> 7</span><span class="fn">photo-sort</span> rate /triees 2008/photo.jpg <span class="op">5</span></div>
+      <div class="line"><span class="ln"> 8</span></div>
+      <div class="line"><span class="ln"> 9</span><span class="cm"># Galerie statique</span></div>
+      <div class="line"><span class="ln">10</span><span class="fn">photo-sort</span> gallery /photos/triees</div>
+      <div class="line"><span class="ln">11</span></div>
+      <div class="line"><span class="ln">12</span><span class="cm"># Serveur interactif</span></div>
+      <div class="line"><span class="ln">13</span><span class="fn">photo-sort</span> serve /photos/triees</div>
+      <div class="line"><span class="ln">14</span><span class="fn">photo-sort</span> serve /photos/triees <span class="op">-p 3000</span></div>
+      <div class="line"><span class="ln">15</span></div>
+      <div class="line"><span class="ln">16</span><span class="cm"># Export filtre</span></div>
+      <div class="line"><span class="ln">17</span><span class="fn">photo-sort</span> export /triees /export <span class="op">--tag</span> <span class="str">vacances</span> <span class="op">--rating</span> <span class="str">4</span></div>
+    </div>
   </div>
-</div>
 </section>
 
-<!-- Installation -->
-<section>
-<h2><span class="icon">&#128187;</span> Installation</h2>
-<pre><code><span class="cmd-prefix">$ </span>git clone https://github.com/yrbane/photo-sort.git
-<span class="cmd-prefix">$ </span>cd photo-sort
-<span class="cmd-prefix">$ </span>cargo build --release</code></pre>
-<p>Le binaire se trouve dans <code>target/release/photo-sort</code>.</p>
+<!-- ═════════════════════════════════════════════════════════════════════════
+     FORMATS
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="formats">
+  <div class="container">
+    <div class="section-tag">Compatibilite</div>
+    <h2 class="section-title">14 formats supportes</h2>
+    <p class="section-desc">
+      JPEG, RAW, HEIC et plus &mdash; tous les formats courants de reflex, hybrides et smartphones.
+    </p>
+
+    <div class="format-badges">
+      <span class="format-badge">jpg</span>
+      <span class="format-badge">jpeg</span>
+      <span class="format-badge">png</span>
+      <span class="format-badge">heic</span>
+      <span class="format-badge">heif</span>
+      <span class="format-badge">cr2</span>
+      <span class="format-badge">cr3</span>
+      <span class="format-badge">nef</span>
+      <span class="format-badge">arw</span>
+      <span class="format-badge">dng</span>
+      <span class="format-badge">orf</span>
+      <span class="format-badge">rw2</span>
+      <span class="format-badge">raf</span>
+      <span class="format-badge">tiff</span>
+    </div>
+  </div>
 </section>
 
-<!-- Commandes -->
-<section>
-<h2><span class="icon">&#9000;</span> Commandes</h2>
+<!-- ═════════════════════════════════════════════════════════════════════════
+     TESTS
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="tests">
+  <div class="container">
+    <div class="section-tag">Qualite</div>
+    <h2 class="section-title">Suite de tests</h2>
+    <p class="section-desc">
+      130 tests couvrant chaque module &mdash; tous passent a chaque commit.
+    </p>
 
-<h3>Trier les photos</h3>
-<pre><code><span class="comment"># Tri basique</span>
-<span class="cmd-prefix">$ </span>photo-sort sort /chemin/vers/photos
+    <div class="test-grid">
+      <div class="test-suite"><span class="ts-name">sort</span><span class="ts-count">28</span></div>
+      <div class="test-suite"><span class="ts-name">gallery</span><span class="ts-count">27</span></div>
+      <div class="test-suite"><span class="ts-name">serve</span><span class="ts-count">22</span></div>
+      <div class="test-suite"><span class="ts-name">thumb</span><span class="ts-count">19</span></div>
+      <div class="test-suite"><span class="ts-name">metadata</span><span class="ts-count">17</span></div>
+      <div class="test-suite"><span class="ts-name">export</span><span class="ts-count">10</span></div>
+    </div>
 
-<span class="comment"># Dossier de sortie personnalise</span>
-<span class="cmd-prefix">$ </span>photo-sort sort /chemin/vers/photos -o /chemin/vers/sortie
-
-<span class="comment"># Fusionner plusieurs sources</span>
-<span class="cmd-prefix">$ </span>photo-sort sort /photos/vacances -o /photos/triees
-<span class="cmd-prefix">$ </span>photo-sort sort /photos/telephone -o /photos/triees</code></pre>
-
-<h3>Taguer et noter</h3>
-<pre><code><span class="cmd-prefix">$ </span>photo-sort tag /photos/triees 2008/2008-07-15_14-30-22.jpg vacances
-<span class="cmd-prefix">$ </span>photo-sort tag /photos/triees 2008/2008-07-15_14-30-22.jpg vacances --remove
-<span class="cmd-prefix">$ </span>photo-sort rate /photos/triees 2008/2008-07-15_14-30-22.jpg 5</code></pre>
-
-<h3>Generer la galerie statique</h3>
-<pre><code><span class="cmd-prefix">$ </span>photo-sort gallery /photos/triees
-<span class="comment"># Ouvrir gallery.html dans un navigateur</span></code></pre>
-
-<h3>Galerie interactive (mode serveur)</h3>
-<pre><code><span class="cmd-prefix">$ </span>photo-sort serve /photos/triees
-<span class="comment"># Ouvre http://localhost:8080</span>
-
-<span class="cmd-prefix">$ </span>photo-sort serve /photos/triees -p 3000
-<span class="comment"># Port personnalise</span></code></pre>
-
-<h3>Exporter des fichiers filtres</h3>
-<pre><code><span class="cmd-prefix">$ </span>photo-sort export /photos/triees /export/vacances --tag vacances
-<span class="cmd-prefix">$ </span>photo-sort export /photos/triees /export/meilleures --rating 4
-<span class="cmd-prefix">$ </span>photo-sort export /photos/triees /export/top --tag vacances --rating 4</code></pre>
+    <div class="test-total">
+      <div class="check-icon">&#10003;</div>
+      <span>130 tests &mdash; all passing</span>
+    </div>
+  </div>
 </section>
 
-<!-- Galerie -->
-<section>
-<h2><span class="icon">&#127748;</span> Galerie web</h2>
-<ul class="features">
-  <li>Grille responsive groupee par annee</li>
-  <li>Lightbox avec navigation clavier</li>
-  <li>Diaporama sequentiel ou aleatoire (1-15 s)</li>
-  <li>Chargement progressif (miniature puis HD)</li>
-  <li>Filtres par tag et note minimale</li>
-  <li>Edition de tags inline + suggestions</li>
-  <li>Notation par etoiles cliquables (0-5)</li>
-  <li>Telechargement individuel</li>
-  <li>Consultation des metadonnees EXIF</li>
-  <li>Miniatures generees automatiquement</li>
-</ul>
+<!-- ═════════════════════════════════════════════════════════════════════════
+     PROJECT STRUCTURE
+     ═════════════════════════════════════════════════════════════════════════ -->
+<section id="structure" style="padding-top: 0;">
+  <div class="container">
+    <div class="section-tag">Source</div>
+    <h2 class="section-title">Fichiers generes</h2>
+    <p class="section-desc">
+      Fichiers crees par photo-sort dans le dossier de sortie.
+    </p>
 
-<h3>Mode serveur : fonctionnalites supplementaires</h3>
-<ul class="features">
-  <li>Sauvegarde directe des tags et notes</li>
-  <li>Suppression avec confirmation</li>
-  <li>Deplacement vers un autre dossier</li>
-  <li>Rotation 90/180/270 degres</li>
-  <li>Modale metadonnees EXIF</li>
-  <li>Pre-generation des miniatures</li>
-</ul>
+    <div class="files-grid">
+      <div class="file-card">
+        <div class="fc-name">.photo_sort_progress.json</div>
+        <div class="fc-desc">Progression + correspondance source/destination/hash BLAKE3</div>
+      </div>
+      <div class="file-card">
+        <div class="fc-name">.photo_sort_metadata.json</div>
+        <div class="fc-desc">Tags et notes par fichier, persistance JSON</div>
+      </div>
+      <div class="file-card">
+        <div class="fc-name">.photo_sort_origins</div>
+        <div class="fc-desc">Correspondance nouveau nom / chemin original (par dossier annee)</div>
+      </div>
+      <div class="file-card">
+        <div class="fc-name">.photo_sort_thumbs/</div>
+        <div class="fc-desc">Cache des miniatures JPEG generees automatiquement (mode serveur)</div>
+      </div>
+      <div class="file-card">
+        <div class="fc-name">gallery.html</div>
+        <div class="fc-desc">Galerie HTML autonome, utilisable sans serveur</div>
+      </div>
+    </div>
+  </div>
 </section>
 
-<!-- API -->
-<section>
-<h2><span class="icon">&#128268;</span> API REST (mode serveur)</h2>
-<table>
-<tr><th>Endpoint</th><th>Description</th></tr>
-<tr><td><span class="api-method api-get">GET</span> <code>/</code></td><td>Galerie HTML (servie depuis le cache)</td></tr>
-<tr><td><span class="api-method api-get">GET</span> <code>/thumb/{path}</code></td><td>Miniature JPEG d'une photo</td></tr>
-<tr><td><span class="api-method api-get">GET</span> <code>/api/exif?path=...</code></td><td>Metadonnees EXIF + taille + dimensions</td></tr>
-<tr><td><span class="api-method api-post">POST</span> <code>/api/metadata</code></td><td>Sauvegarder tags et notes</td></tr>
-<tr><td><span class="api-method api-post">POST</span> <code>/api/move</code></td><td>Deplacer une photo vers un autre dossier</td></tr>
-<tr><td><span class="api-method api-post">POST</span> <code>/api/rotate</code></td><td>Rotation d'une image (90, 180, 270)</td></tr>
-<tr><td><span class="api-method api-delete">DEL</span> <code>/api/photo?path=...</code></td><td>Supprimer une photo</td></tr>
-</table>
-</section>
-
-<!-- Detection de date -->
-<section>
-<h2><span class="icon">&#128197;</span> Detection de date</h2>
-<table>
-<tr><th>Priorite</th><th>Methode</th><th>Description</th></tr>
-<tr><td><span class="prio prio-1">1</span></td><td>EXIF</td><td><code>DateTimeOriginal</code>, <code>DateTimeDigitized</code>, <code>DateTime</code></td></tr>
-<tr><td><span class="prio prio-2">2</span></td><td>Dossier</td><td>Regex <code>(19|20)\d{2}</code> dans le chemin du fichier</td></tr>
-<tr><td><span class="prio prio-3">3</span></td><td>Systeme</td><td>Date de creation ou modification du fichier</td></tr>
-</table>
-</section>
-
-<!-- Formats -->
-<section>
-<h2><span class="icon">&#128444;</span> Formats supportes</h2>
-<p style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem">
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">jpg</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">jpeg</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">png</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">heic</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">heif</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">cr2</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">cr3</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">nef</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">arw</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">dng</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">orf</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">rw2</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">raf</code>
-  <code style="background:var(--surface);border:1px solid var(--border);padding:.2rem .6rem;border-radius:6px">tiff</code>
-</p>
-</section>
-
-<!-- Fichiers generes -->
-<section>
-<h2><span class="icon">&#128193;</span> Fichiers generes</h2>
-<table>
-<tr><th>Fichier</th><th>Description</th></tr>
-<tr><td><code>.photo_sort_progress.json</code></td><td>Progression + correspondance source/destination/hash</td></tr>
-<tr><td><code>.photo_sort_metadata.json</code></td><td>Tags et notes par fichier</td></tr>
-<tr><td><code>.photo_sort_origins</code></td><td>Correspondance nouveau nom / chemin original (par dossier annee)</td></tr>
-<tr><td><code>.photo_sort_thumbs/</code></td><td>Cache des miniatures JPEG (mode serveur)</td></tr>
-<tr><td><code>gallery.html</code></td><td>Galerie HTML autonome</td></tr>
-</table>
-</section>
-
-<!-- Tests -->
-<section>
-<h2><span class="icon">&#9989;</span> Tests</h2>
-<pre><code><span class="cmd-prefix">$ </span>cargo test</code></pre>
-<p>130 tests unitaires couvrant : tri, detection de date, renommage, collisions, hash BLAKE3, progression, metadata (tags/notes), galerie HTML, export filtre, serveur HTTP (API delete/move/rotate/metadata/exif), miniatures.</p>
-</section>
-
-</div>
-
+<!-- ═════════════════════════════════════════════════════════════════════════
+     FOOTER
+     ═════════════════════════════════════════════════════════════════════════ -->
 <footer>
-  <p><strong>photo-sort</strong> &mdash; MIT &mdash; <a href="https://github.com/yrbane/photo-sort">github.com/yrbane/photo-sort</a></p>
+  <div class="container">
+    <p>
+      Built with <span class="heart">&hearts;</span> in Rust &mdash;
+      MIT &mdash;
+      <a href="https://github.com/yrbane/photo-sort">github.com/yrbane/photo-sort</a>
+    </p>
+  </div>
 </footer>
 
+<!-- ═════════════════════════════════════════════════════════════════════════
+     INTERSECTION OBSERVER ANIMATIONS
+     ═════════════════════════════════════════════════════════════════════════ -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const cards = document.querySelectorAll('.feature-card, .gallery-item, .test-suite, .pipe-stage, .file-card, .format-badge');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        entry.target.style.opacity = '0';
+        entry.target.style.transform = 'translateY(16px)';
+        entry.target.style.transition = `opacity .5s ease ${i * 40}ms, transform .5s ease ${i * 40}ms`;
+        requestAnimationFrame(() => {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        });
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  cards.forEach(c => observer.observe(c));
+});
+</script>
 </body>
 </html>
