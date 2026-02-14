@@ -194,6 +194,9 @@ main{{padding:1rem 2rem 4rem}}
 .lb-tag-form input{{background:#1a1a1a;border:1px solid #333;color:#e0e0e0;padding:.2rem .5rem;border-radius:10px;font-size:.8rem;width:100px;outline:none}}
 .lb-tag-form input:focus{{border-color:#4fc3f7}}
 .lb-tag-form button{{background:#4fc3f7;color:#000;border:none;padding:.2rem .5rem;border-radius:10px;font-size:.8rem;cursor:pointer}}
+.tag-suggestions{{display:flex;flex-wrap:wrap;justify-content:center;gap:.25rem;margin:.3rem 0}}
+.tag-suggestions .tag-sug{{background:#1a1a1a;color:#888;border:1px dashed #333;padding:.15rem .5rem;border-radius:10px;font-size:.75rem;cursor:pointer;transition:all .2s}}
+.tag-suggestions .tag-sug:hover{{color:#4fc3f7;border-color:#4fc3f7}}
 .lb-slideshow-bar{{position:absolute;bottom:0;left:0;height:3px;background:#4fc3f7;transition:width linear}}
 
 /* Slideshow controls */
@@ -258,6 +261,7 @@ main{{padding:1rem 2rem 4rem}}
       <span data-star="5">&#9733;</span>
     </div>
     <div class="lb-edit-tags" id="lb-edit-tags"></div>
+    <div class="tag-suggestions" id="tag-suggestions"></div>
   </div>
   <div class="lb-slideshow-bar" id="lb-bar" style="width:0%"></div>
   <div class="slideshow-controls">
@@ -396,6 +400,22 @@ function renderLbTags(photo){{
   const input=document.getElementById('lb-tag-input');
   addBtn.addEventListener('click',()=>addTag(photo,input.value.trim()));
   input.addEventListener('keydown',e=>{{if(e.key==='Enter'){{e.preventDefault();addTag(photo,input.value.trim());}}}});
+  renderTagSuggestions(photo);
+}}
+
+function renderTagSuggestions(photo){{
+  const container=document.getElementById('tag-suggestions');
+  container.innerHTML='';
+  const allTags=new Set();
+  ALL_PHOTOS.forEach(p=>p.tags.forEach(t=>allTags.add(t)));
+  const suggestions=[...allTags].filter(t=>!photo.tags.includes(t)).sort();
+  suggestions.forEach(tag=>{{
+    const chip=document.createElement('span');
+    chip.className='tag-sug';
+    chip.textContent=tag;
+    chip.addEventListener('click',()=>addTag(photo,tag));
+    container.appendChild(chip);
+  }});
 }}
 
 function addTag(photo,tag){{
@@ -959,6 +979,25 @@ mod tests {
 
         assert!(html.contains("btn-export"));
         assert!(html.contains("exportFiltered"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // --- Tag suggestions ---
+
+    #[test]
+    fn html_has_tag_suggestions_ui() {
+        let tmp = tmpdir();
+        setup_photos(&tmp);
+        let photos = collect_photos(&tmp);
+        let mut meta = Metadata::default();
+        meta.add_tag("2020/2020-01-01_00-00-00.jpg", "vacances");
+        meta.add_tag("2020/2020-06-15_12-00-00.jpg", "plage");
+
+        let html = generate_html(&photos, &meta);
+
+        // Tag suggestions container and function
+        assert!(html.contains("tag-suggestions"));
+        assert!(html.contains("renderTagSuggestions"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
