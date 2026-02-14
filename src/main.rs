@@ -1,6 +1,7 @@
 mod export;
 mod gallery;
 mod metadata;
+mod serve;
 mod sort;
 
 use anyhow::{Context, Result};
@@ -50,6 +51,14 @@ enum Commands {
     Gallery {
         /// Dossier de sortie contenant les photos triées
         dir: PathBuf,
+    },
+    /// Lancer la galerie dans le navigateur avec serveur local
+    Serve {
+        /// Dossier contenant les photos triées
+        dir: PathBuf,
+        /// Port du serveur (par défaut : 8080)
+        #[arg(short, long, default_value_t = 8080)]
+        port: u16,
     },
     /// Exporter les fichiers correspondant à un filtre
     Export {
@@ -134,6 +143,7 @@ fn main() -> Result<()> {
             meta.save(&dir)
         }
         Commands::Gallery { dir } => gallery::run_gallery(&dir),
+        Commands::Serve { dir, port } => serve::run_serve(&dir, port),
         Commands::Export {
             dir,
             dest,
