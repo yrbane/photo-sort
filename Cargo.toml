@@ -1,0 +1,18 @@
+[package]
+name = "photo-sort"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+walkdir = "2"
+kamadak-exif = "0.6"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ctrlc = "3"
+blake3 = "1"
+indicatif = "0.17"
+console = "0.15"
