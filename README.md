@@ -91,8 +91,27 @@ photo-sort gallery /photos/triees
 La galerie offre :
 - Grille responsive groupee par annee
 - Lightbox avec navigation clavier (fleches, Echap)
-- Diaporama avec vitesse reglable (1-15s), pause, mode aleatoire
+- Diaporama avec vitesse reglable (1-15s), pause, precedent/suivant, mode aleatoire
 - Filtres par tag et note minimale (affectent la grille et le diaporama)
+- Edition de tags inline (ajout, suppression, suggestions en un clic)
+- Notation par etoiles cliquables (1-5, raccourcis clavier 0-5)
+- Telechargement individuel de photos
+
+### Galerie interactive (mode serveur)
+
+```bash
+photo-sort serve /photos/triees
+# Ouvre http://localhost:8080 dans le navigateur
+
+# Port personnalise
+photo-sort serve /photos/triees -p 3000
+```
+
+Le mode serveur ajoute des fonctionnalites supplementaires :
+- **Sauvegarde directe** des tags et notes (sans telecharger de fichier)
+- **Suppression** d'une photo avec confirmation
+- **Deplacement** d'une photo vers un autre dossier (annee)
+- **Rotation** (90/180/270 degres) des images JPEG, PNG, TIFF
 
 ### Exporter des fichiers filtres
 
@@ -142,7 +161,7 @@ Les fichiers sont renommes au format `yyyy-mm-dd_HH-MM-SS.ext`. En cas de collis
 cargo test
 ```
 
-68 tests unitaires couvrant : tri, detection de date, renommage, collisions, hash BLAKE3, progression, metadata (tags/notes), galerie HTML, export filtre.
+97 tests unitaires couvrant : tri, detection de date, renommage, collisions, hash BLAKE3, progression, metadata (tags/notes), galerie HTML, export filtre, serveur HTTP (API delete/move/rotate/metadata).
 
 ## Licence
 

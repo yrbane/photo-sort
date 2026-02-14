@@ -65,6 +65,7 @@ impl Metadata {
         self.files.get(file).and_then(|i| i.rating)
     }
 
+    #[allow(dead_code)]
     pub fn files_with_tag(&self, tag: &str) -> Vec<String> {
         self.files
             .iter()
@@ -73,6 +74,7 @@ impl Metadata {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn files_with_min_rating(&self, min: u8) -> Vec<String> {
         self.files
             .iter()
