@@ -2,7 +2,7 @@
 
 Outil CLI en Rust qui trie automatiquement vos photos par annee en lisant leurs metadonnees EXIF.
 
-Parcourt recursivement un dossier, detecte la date de chaque photo, puis copie et renomme les fichiers dans une arborescence propre organisee par annee.
+Parcourt recursivement un dossier, detecte la date de chaque photo, puis copie et renomme les fichiers dans une arborescence propre organisee par annee. Inclut une galerie HTML avec lightbox, un systeme de tags/notes, et un export filtre.
 
 ```
 photos/
@@ -10,7 +10,7 @@ photos/
   noel/DSC_4521.CR2
   vrac/photo_random.heic
 
-    photo-sort photos/
+    photo-sort sort photos/
 
 photos_sorted/
   2008/
@@ -23,6 +23,8 @@ photos_sorted/
     2024-03-10_09-12-44.heic
     .photo_sort_origins
   .photo_sort_progress.json
+  .photo_sort_metadata.json
+  gallery.html
 ```
 
 ## Fonctionnalites
@@ -34,6 +36,10 @@ photos_sorted/
 - **Dossier de sortie personnalisable** -- possibilite de fusionner plusieurs sources dans un meme dossier de sortie
 - **Tracabilite** -- fichier `.photo_sort_origins` dans chaque dossier annee avec la correspondance ancien/nouveau nom
 - **14 formats supportes** -- `jpg`, `jpeg`, `heic`, `heif`, `cr2`, `cr3`, `nef`, `arw`, `dng`, `orf`, `rw2`, `raf`, `tiff`, `tif`
+- **Galerie HTML** -- grille responsive avec lightbox, diaporama (sequentiel ou aleatoire), navigation clavier
+- **Tags et notes** -- systeme de tags libres et notes (1-5) par fichier, persistance JSON
+- **Filtres** -- filtrer la galerie et le diaporama par tag et/ou note minimale
+- **Export** -- copier les photos correspondant a un filtre vers un dossier de destination
 
 ## Installation
 
@@ -47,17 +53,58 @@ Le binaire se trouve dans `target/release/photo-sort`.
 
 ## Utilisation
 
+### Trier les photos
+
 ```bash
 # Tri basique -- cree un dossier photos_sorted/ a cote
-photo-sort /chemin/vers/photos
+photo-sort sort /chemin/vers/photos
 
 # Dossier de sortie personnalise
-photo-sort /chemin/vers/photos -o /chemin/vers/sortie
+photo-sort sort /chemin/vers/photos -o /chemin/vers/sortie
 
 # Fusionner plusieurs sources dans le meme dossier
-photo-sort /photos/vacances -o /photos/triees
-photo-sort /photos/noel     -o /photos/triees
-photo-sort /photos/telephone -o /photos/triees
+photo-sort sort /photos/vacances -o /photos/triees
+photo-sort sort /photos/noel     -o /photos/triees
+photo-sort sort /photos/telephone -o /photos/triees
+```
+
+### Taguer et noter
+
+```bash
+# Ajouter un tag
+photo-sort tag /photos/triees 2008/2008-07-15_14-30-22.jpg vacances
+
+# Retirer un tag
+photo-sort tag /photos/triees 2008/2008-07-15_14-30-22.jpg vacances --remove
+
+# Noter un fichier (1-5, 0 pour supprimer)
+photo-sort rate /photos/triees 2008/2008-07-15_14-30-22.jpg 5
+```
+
+### Generer la galerie HTML
+
+```bash
+photo-sort gallery /photos/triees
+# Ouvrir gallery.html dans un navigateur
+```
+
+La galerie offre :
+- Grille responsive groupee par annee
+- Lightbox avec navigation clavier (fleches, Echap)
+- Diaporama avec vitesse reglable (1-15s), pause, mode aleatoire
+- Filtres par tag et note minimale (affectent la grille et le diaporama)
+
+### Exporter des fichiers filtres
+
+```bash
+# Exporter toutes les photos taguees "vacances"
+photo-sort export /photos/triees /export/vacances --tag vacances
+
+# Exporter les photos notees 4 ou plus
+photo-sort export /photos/triees /export/meilleures --rating 4
+
+# Combiner tag et note
+photo-sort export /photos/triees /export/top-vacances --tag vacances --rating 4
 ```
 
 ## Detection de date
@@ -82,32 +129,12 @@ Les fichiers sont renommes au format `yyyy-mm-dd_HH-MM-SS.ext`. En cas de collis
 
 ## Fichiers generes
 
-### `.photo_sort_progress.json`
-
-Fichier de progression a la racine du dossier de sortie. Permet la reprise et la tracabilite complete :
-
-```json
-{
-  "processed": [
-    {
-      "source": "/photos/vacances 2008/DCIM/IMG_0001.jpg",
-      "dest": "2008/2008-07-15_14-30-22.jpg",
-      "size": 4523123,
-      "hash": "a1b2c3d4e5f6...",
-      "date_source": "exif"
-    }
-  ]
-}
-```
-
-### `.photo_sort_origins`
-
-Un fichier par dossier annee, listant la correspondance entre le nouveau nom et le chemin original :
-
-```
-2008-07-15_14-30-22.jpg <- /photos/vacances 2008/DCIM/IMG_0001.jpg
-2008-07-15_14-30-22_1.jpg <- /photos/autre dossier/IMG_0002.jpg
-```
+| Fichier | Emplacement | Description |
+| ------- | ----------- | ----------- |
+| `.photo_sort_progress.json` | Racine sortie | Progression + correspondance source/destination/hash |
+| `.photo_sort_metadata.json` | Racine sortie | Tags et notes par fichier |
+| `.photo_sort_origins` | Chaque dossier annee | Correspondance nouveau nom / chemin original |
+| `gallery.html` | Racine sortie | Galerie HTML autonome |
 
 ## Tests
 
@@ -115,7 +142,7 @@ Un fichier par dossier annee, listant la correspondance entre le nouveau nom et 
 cargo test
 ```
 
-26 tests unitaires couvrant la detection de date, le renommage, la gestion des collisions, le hash BLAKE3, la serialisation du fichier de progression et la tracabilite.
+68 tests unitaires couvrant : tri, detection de date, renommage, collisions, hash BLAKE3, progression, metadata (tags/notes), galerie HTML, export filtre.
 
 ## Licence
 
